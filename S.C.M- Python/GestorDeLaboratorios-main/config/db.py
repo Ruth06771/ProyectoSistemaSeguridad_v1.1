@@ -1,0 +1,306 @@
+import os
+import sqlite3
+from pathlib import Path
+
+# Configurable list of allowed email domains (coma-separados en la variable de entorno)
+EMAIL_ALLOWED_DOMAINS = [d.strip().lower() for d in os.environ.get('EMAIL_ALLOWED_DOMAINS', 'ueb.edu.bo').split(',') if d.strip()]
+
+# ============================================================
+# CONFIGURACIÓN DE LA BASE DE DATOS
+# ============================================================
+
+DEV_SQLITE_PATH = Path(__file__).resolve().parent.parent / 'data' / 'dev.sqlite3'
+DEV_SQLITE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+
+def get_connection():
+    """Devuelve una conexión sqlite3 con row_factory configurada y asegura el esquema."""
+    conn = sqlite3.connect(str(DEV_SQLITE_PATH), check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    _ensure_sqlite_schema(conn)
+    return conn
+
+
+def _ensure_sqlite_schema(conn):
+    """Crea las tablas necesarias si no existen. Usa nombres en snake_case coherentes con el resto del código."""
+    cur = conn.cursor()
+    cur.execute('PRAGMA foreign_keys = ON;')
+
+    # tablas maestras / auxiliares
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS tipo_sangre (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL,
+        estado INTEGER DEFAULT 1
+    )
+    ''')
+
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS persona_emergencia (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombres TEXT NOT NULL,
+        apellidos TEXT NOT NULL,
+        telefono_personal TEXT,
+        estado INTEGER DEFAULT 1
+    )
+    ''')
+
+    # personas
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS personas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre_completo TEXT NOT NULL,
+        fecha_nacimiento TEXT,
+        correo TEXT,
+        telefono_personal TEXT,
+        documento_identidad TEXT,
+        sexo TEXT,
+        tipo_sangre INTEGER,
+        rol TEXT,
+        estado INTEGER DEFAULT 1,
+        persona_emergencia INTEGER,
+        telefono_emergencia TEXT,
+        FOREIGN KEY(tipo_sangre) REFERENCES tipo_sangre(id),
+        FOREIGN KEY(persona_emergencia) REFERENCES persona_emergencia(id)
+    )
+    ''')
+
+    # roles y usuarios
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS rol_sistema (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL,
+        estado INTEGER DEFAULT 1
+    )
+    ''')
+
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS usuario_sistema (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        persona_id INTEGER,
+        nombre_usuario TEXT UNIQUE,
+        contrasena TEXT,
+        rol_id INTEGER,
+        estado INTEGER DEFAULT 1,
+        FOREIGN KEY(persona_id) REFERENCES personas(id),
+        FOREIGN KEY(rol_id) REFERENCES rol_sistema(id)
+    )
+    ''')
+
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS permisos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL,
+        estado INTEGER DEFAULT 1
+    )
+    ''')
+
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS detalle_del_permiso (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        permiso_id INTEGER,
+        estado INTEGER DEFAULT 1,
+        rol_id INTEGER,
+        FOREIGN KEY(permiso_id) REFERENCES permisos(id),
+        FOREIGN KEY(rol_id) REFERENCES rol_sistema(id)
+    )
+    ''')
+
+    # perfil acceso
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS perfil_acceso_lab (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT,
+        estado INTEGER DEFAULT 1
+    )
+    ''')
+
+    # tarjetas
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS tarjetas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uid TEXT UNIQUE NOT NULL,
+        pin TEXT,
+        estado INTEGER DEFAULT 1,
+        fecha_registro TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    # If the 'pin' column was added later, ensure existing DB has the column
+    try:
+        cur.execute("PRAGMA table_info(tarjetas)")
+        cols = [r['name'] for r in cur.fetchall()]
+        if 'pin' not in cols:
+            try:
+                cur.execute('ALTER TABLE tarjetas ADD COLUMN pin TEXT')
+            except Exception:
+                # Some SQLite versions or backends may not allow ALTER; ignore if it fails
+                pass
+    except Exception:
+        pass
+
+    # Ensure personas table has 'estado' column (for existing DBs)
+    try:
+        cur.execute("PRAGMA table_info(personas)")
+        cols = [r['name'] for r in cur.fetchall()]
+        if 'estado' not in cols:
+            try:
+                cur.execute('ALTER TABLE personas ADD COLUMN estado INTEGER DEFAULT 1')
+            except Exception:
+                # ignore if ALTER fails on some sqlite builds
+                pass
+    except Exception:
+        pass
+
+    # enrolamiento
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS enrolar (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        persona_id INTEGER,
+        tarjeta_uid TEXT,
+        tarjeta_id INTEGER,
+        codigo_ingreso TEXT,
+        perfil_acceso_lab_id INTEGER,
+        estado INTEGER DEFAULT 1,
+        fecha_de_registro TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(persona_id) REFERENCES personas(id),
+        FOREIGN KEY(perfil_acceso_lab_id) REFERENCES perfil_acceso_lab(id),
+        FOREIGN KEY(tarjeta_id) REFERENCES tarjetas(id)
+    )
+    ''')
+
+    # Ensure enrolar table has 'tarjeta_id' column and migrate values from 'tarjeta_uid' when possible
+    try:
+        cur.execute("PRAGMA table_info(enrolar)")
+        cols = [r['name'] for r in cur.fetchall()]
+        if 'tarjeta_id' not in cols:
+            try:
+                cur.execute('ALTER TABLE enrolar ADD COLUMN tarjeta_id INTEGER')
+                # If there is an existing tarjeta_uid column, try to populate tarjeta_id
+                if 'tarjeta_uid' in cols:
+                    try:
+                        cur.execute(
+                            """
+                            UPDATE enrolar
+                            SET tarjeta_id = (
+                                SELECT id FROM tarjetas WHERE tarjetas.uid = enrolar.tarjeta_uid
+                            )
+                            WHERE tarjeta_uid IS NOT NULL
+                            """
+                        )
+                    except Exception:
+                        # best-effort population; ignore failures
+                        pass
+            except Exception:
+                # Some SQLite builds may restrict ALTER TABLE; ignore on failure
+                pass
+    except Exception:
+        pass
+
+    # tipos de movimiento
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS tipo_movimiento (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL UNIQUE,
+        estado INTEGER DEFAULT 1
+    )
+    ''')
+
+    # Seed default movement types if empty
+    try:
+        cur.execute("SELECT COUNT(*) FROM tipo_movimiento")
+        count = cur.fetchone()[0]
+        if count == 0:
+            cur.execute("INSERT INTO tipo_movimiento (nombre, estado) VALUES (?, ?)", ('Entrada', 1))
+            cur.execute("INSERT INTO tipo_movimiento (nombre, estado) VALUES (?, ?)", ('Salida', 1))
+            conn.commit()
+    except Exception:
+        # If insert fails (e.g., duplicates exist), continue
+        pass
+
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS tipo_dispositivo (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT,
+        estado INTEGER DEFAULT 1
+    )
+    ''')
+
+    # registro de accesos
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS registro_acceso (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tarjeta_uid TEXT,
+        codigo_ingreso TEXT,
+        fecha_hora TEXT DEFAULT CURRENT_TIMESTAMP,
+        tipo_movimiento_id INTEGER,
+        tipo_dispositivo_id INTEGER,
+        descripcion TEXT,
+        estado INTEGER DEFAULT 1,
+        FOREIGN KEY(tipo_movimiento_id) REFERENCES tipo_movimiento(id),
+        FOREIGN KEY(tipo_dispositivo_id) REFERENCES tipo_dispositivo(id)
+    )
+    ''')
+
+    # dispositivos (ESP32)
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS dispositivos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL,
+        api_key TEXT UNIQUE NOT NULL,
+        activo INTEGER DEFAULT 1,
+        fecha_registro TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    # historiales y bitácora
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS historial_acciones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        modulo TEXT,
+        entidad_id INTEGER,
+        entidad_tipo TEXT,
+        accion TEXT,
+        usuario TEXT,
+        descripcion TEXT,
+        fecha_hora TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS historial_tarjetas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tarjeta_id INTEGER,
+        uid TEXT,
+        nombre_completo TEXT,
+        accion TEXT,
+        ejecutado_por TEXT,
+        descripcion TEXT,
+        fecha_hora TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(tarjeta_id) REFERENCES tarjetas(id)
+    )
+    ''')
+
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS bitacora (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario_sistema_id INTEGER,
+        estado INTEGER DEFAULT 1,
+        FOREIGN KEY(usuario_sistema_id) REFERENCES usuario_sistema(id)
+    )
+    ''')
+
+    conn.commit()
+    cur.close()
+
+
+def log_action(connection, modulo, entidad_id=None, entidad_tipo=None,
+               accion=None, usuario=None, descripcion=None):
+    """Inserta una fila de auditoría en `historial_acciones`."""
+    sql = '''
+    INSERT INTO historial_acciones
+    (modulo, entidad_id, entidad_tipo, accion, usuario, descripcion)
+    VALUES (?, ?, ?, ?, ?, ?)
+    '''
+    connection.execute(sql, (modulo, entidad_id, entidad_tipo, accion, usuario, descripcion))
+    connection.commit()

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Historial de Accesos</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='estilos.css') }}">
+</head>
+<body>
+
+{% include 'header.html' %}
+
+<div class="container">
+    <h2>Historial de Acciones sobre Tarjetas RFID</h2>
+
+    <table border="1">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Fecha</th>
+                <th>Usuario</th>
+                <th>ID Tarjeta</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in resultados %}
+            <tr>
+                <td>{{ row.id }}</td>
+                <td>{{ row.fecha }}</td>
+                <td>{{ row.usuario_nombre }}</td>
+                <td>{{ row.id_tarjeta }}</td>
+                <td>{{ 'Alta' if row.accion == 'alta' else 'Baja' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+</body>
+</html>

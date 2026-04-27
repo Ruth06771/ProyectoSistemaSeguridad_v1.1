@@ -1,0 +1,150 @@
+from flask import Blueprint, request, make_response
+from io import BytesIO
+try:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.pdfgen import canvas
+    REPORTLAB_AVAILABLE = True
+except Exception:
+    REPORTLAB_AVAILABLE = False
+
+from config.db import get_connection
+import os
+
+bp = Blueprint('exportar_pdf_tarjetas', __name__)
+
+
+@bp.route('/reporte_tarjetas')
+def reporte_tarjetas():
+    if not REPORTLAB_AVAILABLE:
+        return ("ReportLab no está instalado en el servidor. Instale 'reportlab' para habilitar exportes PDF."), 500
+    # Obtener filtros
+    fecha_desde = request.args.get('fecha_desde', '')
+    fecha_hasta = request.args.get('fecha_hasta', '')
+    accion = request.args.get('accion', '')
+    usuario = request.args.get('usuario', '')
+    tarjeta = request.args.get('tarjeta', '')
+
+    # Construir consulta
+    query = "SELECT * FROM historial_tarjetas WHERE 1=1"
+    params = []
+
+    if fecha_desde:
+        query += " AND fecha_hora >= %s"
+        params.append(fecha_desde + " 00:00:00")
+    if fecha_hasta:
+        query += " AND fecha_hora <= %s"
+        params.append(fecha_hasta + " 23:59:59")
+    if accion:
+        query += " AND accion = %s"
+        params.append(accion)
+    if usuario:
+        query += " AND ejecutado_por LIKE %s"
+        params.append(f"%{usuario}%")
+    if tarjeta:
+        query += " AND uid LIKE %s"
+        params.append(f"%{tarjeta}%")
+
+    query += " ORDER BY fecha_hora DESC"
+
+    # Conectar y ejecutar consulta
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        try:
+            exec_query = query
+            if connection.__class__.__module__.startswith('sqlite3'):
+                exec_query = exec_query.replace('%s', '?')
+            cursor.execute(exec_query, params)
+            resultados = cursor.fetchall()
+            if resultados and hasattr(resultados[0], 'keys'):
+                resultados = [dict(r) for r in resultados]
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+    finally:
+        connection.close()
+
+    # Crear PDF
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=80)
+    elements = []
+
+    styles = getSampleStyleSheet()
+    title = Paragraph("Reporte de Altas y Bajas de Tarjetas RFID", styles['Title'])
+    elements.append(title)
+    elements.append(Spacer(1, 12))
+
+    # Construir tabla de datos
+    data = [['ID', 'UID', 'Nombre', 'Acción', 'Ejecutado por', 'Fecha y Hora']]
+    for row in resultados:
+        data.append([
+            row.get('id'),
+            row.get('uid') or row.get('TarjetaUID') or '',
+            row.get('nombre_completo') or row.get('Nombre') or '',
+            row.get('accion') or '',
+            row.get('ejecutado_por') or row.get('responsable') or '',
+            str(row.get('fecha_hora') or '')
+        ])
+
+    table = Table(data, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.grey),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold')
+    ]))
+    elements.append(table)
+
+    # Función para añadir header con logo en cada página
+    def add_header(canvas, doc):
+        canvas.saveState()
+        # Dibujar dos logos: UEB a la izquierda, TechSpot a la derecha (fallbacks si faltan)
+        base = os.path.join(os.path.dirname(__file__), '..', '..', 'static', 'img')
+        # Buscar variantes del logo UEB
+        left_candidates = ['ueb-logo.png', 'uebLogo.png', 'ueb-logo.jpg', 'uebLogo.png.jpg', 'ueb-logo.jpeg']
+        left_logo = None
+        for name in left_candidates:
+            p = os.path.join(base, name)
+            if os.path.exists(p):
+                left_logo = p
+                left_name = name
+                break
+        # Techspot logo (right)
+        right_candidates = ['techspot-logo.png', 'techspot.png']
+        right_logo = None
+        for name in right_candidates:
+            p = os.path.join(base, name)
+            if os.path.exists(p):
+                right_logo = p
+                right_name = name
+                break
+        # Fallback behavior
+        if not right_logo:
+            right_logo = left_logo
+        if not left_logo:
+            left_logo = right_logo
+        # Dibujar si existen
+        try:
+            if left_logo and os.path.exists(left_logo):
+                canvas.drawImage(left_logo, 30, 700, width=60, height=60, preserveAspectRatio=True)
+            if right_logo and os.path.exists(right_logo):
+                canvas.drawImage(right_logo, 520, 700, width=60, height=60, preserveAspectRatio=True)
+        except Exception as e:
+            print(f"Error al dibujar logos en tarjetas: {e}")
+        canvas.restoreState()
+
+    doc.build(elements, onFirstPage=add_header, onLaterPages=add_header)
+    pdf = buffer.getvalue()
+    buffer.close()
+
+    # Responder PDF
+    response = make_response(pdf)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = 'attachment; filename=reporte_tarjetas.pdf'
+    return response

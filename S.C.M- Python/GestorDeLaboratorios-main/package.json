@@ -1,0 +1,20 @@
+{
+  "name": "gestor-de-laboratorios",
+  "version": "1.0.0",
+  "description": "Frontend React para el sistema de gestión de laboratorios",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently -k \"py -3 auth/login_api.py\" \"npx wait-on tcp:5000 && npm --prefix frontend run dev\"",
+    "start": "echo \"This root package.json no longer starts the frontend. Use the frontend/package.json scripts (npm run dev) or start Flask.\"",
+    "build": "echo \"Frontend build is in frontend/. Use 'cd frontend && npm run build'\""
+  },
+  "dependencies": {
+    "bootstrap": "^5.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "wait-on": "^9.0.4"
+  }
+}

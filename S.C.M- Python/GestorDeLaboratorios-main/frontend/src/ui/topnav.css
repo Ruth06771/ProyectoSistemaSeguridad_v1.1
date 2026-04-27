@@ -1,0 +1,103 @@
+.topnav {
+  background: linear-gradient(180deg,var(--primary-800) 0%, var(--primary-900) 100%);
+  color: #fff;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  position: sticky;
+  top: 0;
+  z-index: 1100;
+  font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+.topnav .topnav-inner {
+  padding: 0.9rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.brand { display:flex; align-items:center; gap:0.6rem }
+.brand svg { box-shadow: 0 6px 22px rgba(0,0,0,0.14); border-radius:6px }
+.brand-logo { width:48px; height:48px; object-fit:contain; border-radius:8px; box-shadow:0 8px 28px rgba(2,18,40,0.18); background: #fff; padding:4px }
+.site-title { color: #fff; font-weight:700; cursor:pointer; font-size:1.12rem; letter-spacing:0.2px }
+.site-subtitle { color: #f4c95d; font-size:0.82rem; margin-top:2px; font-weight:600 }
+.menu { display:flex; gap:1rem; align-items:center }
+.menu-button { color: #e8eef8; font-weight:600; padding:0.45rem 0.85rem; border-radius:8px }
+.menu-button:hover { background: rgba(255,255,255,0.04) }
+
+.topnav .container { display:flex; align-items:center; justify-content:space-between; gap:1rem }
+
+/* make header taller like institutional sites */
+.menu-button { background: transparent; color:#fff; border: none; padding: 0.35rem 0.6rem; cursor:pointer; font-weight:600 }
+.menu-button:hover { background: rgba(255,255,255,0.05); border-radius:6px }
+.menu-item { position: relative; overflow: visible; }
+.submenu {
+  position: absolute;
+  top: 100%; /* align directly under button without extra gap */
+  left: 0;
+  margin-top: 0; /* remove gap to avoid cursor leaving the area */
+  min-width: 180px;
+  background: #fff;
+  color: #222;
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(11,77,145,0.12);
+  z-index: 1400;
+  padding: 6px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity .14s ease, transform .14s ease;
+  pointer-events: none;
+}
+.user-actions { display:flex; align-items:center; gap:0.5rem }
+
+@media (max-width: 900px) {
+  .menu { display:none }
+  .hamburger { display:block; }
+}
+:root{
+  --primary-900: #03182b;
+  --primary-800: #052340;
+  --accent-gold: #f4c95d;
+  --accent-soft: #ffd166;
+  --muted: #6c757d;
+}
+
+.menu-button{background:transparent;color:#e9f0fb;border:0;padding:0.45rem 0.85rem;border-radius:10px;font-weight:600;cursor:pointer}
+.menu-button:hover,.menu-button.active,.menu-item:hover> .menu-button{background:rgba(255,255,255,0.04);box-shadow:inset 0 -2px 0 rgba(255,255,255,0.03)}
+
+/* Submenu styling for professional dropdowns */
+.submenu{
+  position:absolute;
+  top:100%;
+  left:0;
+  margin-top:0;
+  min-width:220px;
+  background:#fff;
+  color:#0b3a52;
+  border-radius:10px;
+  box-shadow:0 20px 60px rgba(2,18,40,0.12);
+  padding:6px;
+  opacity:0;
+  transform:translateY(6px) scale(.99);
+  transform-origin:top left;
+  transition:opacity .16s ease, transform .16s ease;
+  pointer-events:none;
+  z-index:1400;
+}
+.menu-item.open .submenu,
+.menu-item:hover .submenu,
+.menu-item:focus-within .submenu {
+  opacity:1;
+  transform:translateY(0) scale(1);
+  pointer-events:auto;
+}
+.submenu button{display:block;width:100%;text-align:left;padding:0.6rem 0.9rem;background:transparent;border:0;color:var(--primary-900);font-weight:500;border-radius:8px}
+.submenu button:hover{background:#f4f7fb}
+
+.user-actions{display:flex;align-items:center;gap:0.6rem}
+.hamburger{display:none}
+
+@media(max-width:900px){
+  .menu{display:none}
+  .hamburger{display:block;background:transparent;border:0;color:#fff;font-size:1.3rem}
+  .submenu{position:static;margin:0;padding-left:0;box-shadow:none;background:transparent;color:#fff}
+  .submenu button{color:#fff;padding-left:1.2rem}
+}
+

@@ -1,0 +1,4 @@
+/* Overrides to guarantee top navigation layout and hide any leftover sidebar */
+.app-sidebar { display: none !important; }
+.topnav { width: 100% !important; position: sticky; top: 0; z-index: 1200 !important; }
+.app-main { margin-left: 0 !important; }

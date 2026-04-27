@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Historial de Accesos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Estilos locales para el logo en los reportes */
+        .report-logo {
+            display: inline-block;
+            max-width: 160px; /* default, can be overridden via inline style from Jinja */
+            border-radius: 6px; /* menos redondeo */
+            /* sin sombra para un estilo más plano */
+            box-shadow: none;
+            /* fondo transparente para integrarse con el layout */
+            background: transparent;
+            padding: 2px 4px; /* menos padding para que el borde sea más sutil */
+            vertical-align: middle;
+        }
+        .report-logo.hidden { display: none !important; }
+
+    /* Helper sizes (optional) */
+    .report-logo--small { max-width: 80px; }
+    .report-logo--medium { max-width: 120px; }
+    .report-logo--large { max-width: 200px; }
+    </style>
+</head>
+<body>
+<div class="container mt-4">
+
+    <div class="{% if logo_align=='left' %}text-start{% elif logo_align=='right' %}text-end{% else %}text-center{% endif %} mb-3">
+    <!-- Use CSS classes for sizing and Bootstrap utilities for border to avoid inline Jinja inside <style> blocks -->
+    <img src="{{ url_for('serve_logo') }}"
+             alt="Logo Universidad Evangélica Boliviana"
+             title="Universidad Evangélica Boliviana"
+             class="report-logo border border-primary p-1 {% if logo_size=='small' %}report-logo--small{% elif logo_size=='large' %}report-logo--large{% elif logo_size=='medium' %}report-logo--medium{% endif %}"
+             onerror="this.classList.add('hidden'); this.alt='';">
+    </div>
+    <h2 class="text-center">Reporte de Historial de Accesos</h2>
+
+    <div class="text-start mb-3">
+        <a href="{{ url_for('tarjetas_historial') }}" class="btn btn-outline-secondary">
+            ← Volver al Módulo de Reportes
+        </a>
+    </div>
+
+    <form method="GET" class="row g-3 mb-4">
+        <div class="col-md-3">
+            <label for="fecha_desde" class="form-label">Fecha Desde</label>
+            <input type="date" class="form-control" id="fecha_desde" name="fecha_desde" value="{{ fecha_desde }}">
+        </div>
+        <div class="col-md-3">
+            <label for="fecha_hasta" class="form-label">Fecha Hasta</label>
+            <input type="date" class="form-control" id="fecha_hasta" name="fecha_hasta" value="{{ fecha_hasta }}">
+        </div>
+        <div class="col-md-2">
+            <label for="tipo_accion" class="form-label">Tipo de Acción</label>
+            {% set acciones = [('', '-- Todos --'), ('alta', 'Alta'), ('baja', 'Baja'), ('acceso permitido', 'Acceso Permitido'), ('acceso denegado', 'Acceso Denegado')] %}
+            <select class="form-select" id="tipo_accion" name="tipo_accion">
+                {% for val, label in acciones %}
+                <option value="{{ val }}" selected="{{ 'selected' if (tipo_accion == val) else '' }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label for="usuario_responsable" class="form-label">Usuario Responsable</label>
+            <input type="text" class="form-control" id="usuario_responsable" name="usuario_responsable" value="{{ usuario_responsable }}" placeholder="Nombre o usuario">
+        </div>
+        <div class="col-md-2">
+            <label for="tarjeta" class="form-label">Tarjeta RFID</label>
+            <input type="text" class="form-control" id="tarjeta" name="tarjeta" value="{{ tarjeta }}" placeholder="ID o código">
+        </div>
+        <div class="col-12 d-flex gap-2">
+            <button class="btn btn-primary">🔍 Filtrar</button>
+            <a href="{{ url_for('tarjetas_historial') }}" class="btn btn-secondary">🔄 Limpiar</a>
+            <a href="#" class="btn btn-success">📥 Exportar a Excel</a>
+            <a href="#" class="btn btn-danger">📄 Exportar a PDF</a>
+        </div>
+    </form>
+
+    <table class="table table-striped table-bordered table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>Fecha y Hora</th>
+                <th>Acción</th>
+                <th>Usuario Responsable</th>
+                <th>Tarjeta RFID</th>
+                <th>Descripción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in registros %}
+            <tr>
+                <td>{{ row.id }}</td>
+                <td>{{ row.fecha_hora }}</td>
+                <td>{{ row.accion }}</td>
+                <td>{{ row.usuario_responsable }}</td>
+                <td>{{ row.tarjeta }}</td>
+                <td>{{ row.descripcion }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center">No hay resultados</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</div>
+</body>
+</html>

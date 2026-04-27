@@ -1,0 +1,109 @@
+
+    template = """
+    <!doctype html>
+    <html lang="es">
+    <head>
+        <meta charset="utf-8">
+        <title>Tarjetas Registradas</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body class="p-4">
+        <h2 class="mb-4">Tarjetas Registradas</h2>
+        <a href="#" class="btn btn-secondary mb-3">← Volver al Panel de Administración</a>
+        <a href="#" class="btn btn-primary mb-3 ms-2">+ Nueva Tarjeta</a>
+
+        <form method="GET" class="mb-3">
+            <div class="input-group">
+                <input type="text" name="buscar" class="form-control" placeholder="Buscar por UID, nombre o correo..." value="{{ busqueda }}">
+                <button type="submit" class="btn btn-outline-primary">Buscar</button>
+                {% if busqueda %}
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Limpiar</a>
+                {% endif %}
+            </div>
+        </form>
+
+        <table class="table table-bordered table-striped">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>UID</th>
+                    <th>Nombre</th>
+                    <th>Correo</th>
+                    <th>Estado</th>
+                    <th>Registrada</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if tarjetas %}
+                    {% for fila in tarjetas %}
+                        {% set accion = 'Deshabilitar' if fila.estado == 'habilitada' else 'Habilitar' %}
+                        {% set btnClass = 'btn-danger' if fila.estado == 'habilitada' else 'btn-success' %}
+                        <tr>
+                            <td>{{ fila.id }}</td>
+                            <td>{{ fila.uid }}</td>
+                            <td>{{ fila.nombre_completo }}</td>
+                            <td>{{ fila.correo }}</td>
+                            <td>{{ fila.estado }}</td>
+                            <td>{{ fila.creada_en }}</td>
+                            <td>
+                                <button type="button" class="btn {{ btnClass }} btn-sm"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#confirmarModal"
+                                        data-id="{{ fila.id }}"
+                                        data-estado="{{ 'inhabilitada' if fila.estado == 'habilitada' else 'habilitada' }}"
+                                        data-nombre="{{ fila.nombre_completo }}">
+                                    {{ accion }}
+                                </button>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center">No se encontraron resultados.</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+
+        <!-- Modal de Confirmación -->
+        <div class="modal fade" id="confirmarModal" tabindex="-1" aria-labelledby="confirmarModalLabel" aria-hidden="true">
+          <div class="modal-dialog">
+            <form method="POST">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title" id="confirmarModalLabel">Confirmar acción</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                  ¿Estás seguro de que deseas <span id="textoAccion"></span> la tarjeta de <strong id="nombreUsuario"></strong>?
+                </div>
+                <div class="modal-footer">
+                  <input type="hidden" name="id" id="modalId">
+                  <input type="hidden" name="estado" id="modalEstado">
+                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                  <button type="submit" class="btn btn-primary">Sí, confirmar</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+        <script>
+          const confirmarModal = document.getElementById('confirmarModal');
+          confirmarModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const id = button.getAttribute('data-id');
+            const estado = button.getAttribute('data-estado');
+            const nombre = button.getAttribute('data-nombre');
+
+            document.getElementById('modalId').value = id;
+            document.getElementById('modalEstado').value = estado;
+            document.getElementById('textoAccion').textContent = (estado === 'habilitada' ? 'habilitar' : 'dar de baja');
+            document.getElementById('nombreUsuario').textContent = nombre;
+          });
+        </script>
+    </body>
+    </html>
+    """

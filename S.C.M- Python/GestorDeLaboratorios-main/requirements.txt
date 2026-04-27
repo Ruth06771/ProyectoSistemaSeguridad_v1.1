@@ -1,0 +1,5 @@
+# Project Python dependencies (PDF exports)
+# Note: WeasyPrint may require system libraries on Windows (cairo, pango, gdk-pixbuf).
+# If installation fails, see https://weasyprint.readthedocs.io/en/stable/install.html
+reportlab
+weasyprint

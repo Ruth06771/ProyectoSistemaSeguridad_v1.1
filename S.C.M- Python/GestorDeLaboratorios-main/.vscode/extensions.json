@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "wholroyd.jinja", 
+    "ms-python.python",
+    "esbenp.prettier-vscode"
+  ]
+}

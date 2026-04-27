@@ -1,0 +1,106 @@
+{% include 'includes/header.html' %}
+
+<div class="container mt-4">
+    <h2 class="mb-4">Registrar Nueva Persona</h2>
+
+    <div class="mb-4">
+        <a href="{{ url_for('registrar_persona') }}" class="btn btn-secondary">← Volver al listado de personas</a>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary ms-2">🏠 Volver al inicio</a>
+    </div>
+
+    {% with mensajes = get_flashed_messages(with_categories=true) %}
+        {% if mensajes %}
+            {% for categoria, mensaje in mensajes %}
+                <div class="alert alert-{{ categoria }}">{{ mensaje }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <form method="POST" novalidate>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label for="nombre_completo" class="form-label">Nombre Completo <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="nombre_completo" name="nombre_completo" required>
+            </div>
+
+            <div class="col-md-6">
+                <label for="fecha_nacimiento" class="form-label">Fecha de Nacimiento <span class="text-danger">*</span></label>
+                <input type="date" class="form-control" id="fecha_nacimiento" name="fecha_nacimiento" required>
+            </div>
+
+            <div class="col-md-6">
+                <label for="correo" class="form-label">Correo Electrónico <span class="text-danger">*</span></label>
+                <input type="email" class="form-control" id="correo" name="correo" required>
+            </div>
+
+            <div class="col-md-6">
+                <label for="telefono_personal" class="form-label">Teléfono Personal</label>
+                <input type="tel" pattern="\d*" class="form-control" id="telefono_personal" name="telefono_personal" placeholder="Solo números">
+            </div>
+
+            <div class="col-md-6">
+                <label for="documento_identidad" class="form-label">Número de Carnet <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="documento_identidad" name="documento_identidad" required>
+            </div>
+
+            <div class="col-md-6">
+                <label for="sexo" class="form-label">Sexo <span class="text-danger">*</span></label>
+                <select class="form-select" id="sexo" name="sexo" required>
+                    <option value="">Selecciona...</option>
+                    <option value="Masculino">Masculino</option>
+                    <option value="Femenino">Femenino</option>
+                    <option value="Otro">Otro</option>
+                </select>
+            </div>
+
+            <div class="col-md-6">
+                <label for="tipo_sangre" class="form-label">Tipo de Sangre</label>
+                <select class="form-select" id="tipo_sangre" name="tipo_sangre">
+                    <option value="">No especificado</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                </select>
+            </div>
+
+            <div class="col-md-6">
+                <label for="persona_emergencia" class="form-label">Persona de Emergencia <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="persona_emergencia" name="persona_emergencia" required>
+            </div>
+
+            <div class="col-md-6">
+                <label for="telefono_emergencia" class="form-label">Teléfono de Emergencia <span class="text-danger">*</span></label>
+                <input type="tel" pattern="\d+" class="form-control" id="telefono_emergencia" name="telefono_emergencia" required placeholder="Solo números">
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary">Guardar Registro</button>
+            <a href="{{ url_for('registrar_persona') }}" class="btn btn-secondary ms-2">Cancelar</a>
+            <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary ms-2">🏠 Volver al inicio</a>
+        </div>
+    </form>
+</div>
+
+<script>
+(() => {
+  'use strict'
+  const forms = document.querySelectorAll('form')
+  Array.from(forms).forEach(form => {
+    form.addEventListener('submit', event => {
+      if (!form.checkValidity()) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      form.classList.add('was-validated')
+    }, false)
+  })
+})()
+</script>
+
+{% include 'includes/footer.html' %}

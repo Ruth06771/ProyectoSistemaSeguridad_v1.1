@@ -1,0 +1,69 @@
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Registrar Nueva Tarjeta RFID</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="container mt-5">
+
+<h2 class="mb-4">Registrar Nueva Tarjeta RFID</h2>
+
+<div class="mb-3">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">← Volver a Tarjetas Registradas</a>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary ms-2">🏠 Volver al inicio</a>
+</div>
+
+<!-- Mensajes de error o éxito -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<form action="{{ url_for('registrar_tarjeta') }}" method="POST" class="mb-5">
+    <div class="mb-3">
+        <label for="uid" class="form-label">UID de la Tarjeta</label>
+        <input type="text" id="uid" name="uid" class="form-control" required>
+    </div>
+
+    <div class="mb-3">
+        <label for="nombre_completo" class="form-label">Nombre Completo</label>
+        <input type="text" id="nombre_completo" name="nombre_completo" class="form-control" required>
+    </div>
+
+    <div class="mb-3">
+        <label for="correo" class="form-label">Correo Electrónico</label>
+        <input type="email" id="correo" name="correo" class="form-control" required>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Guardar Tarjeta</button>
+</form>
+
+<!-- Mostrar tarjetas registradas -->
+<h3>Tarjetas Registradas</h3>
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>UID</th>
+            <th>Nombre Completo</th>
+            <th>Correo</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for tarjeta in tarjetas %}
+        <tr>
+            <td>{{ tarjeta[0] }}</td>
+            <td>{{ tarjeta[1] }}</td>
+            <td>{{ tarjeta[2] }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+</body>
+</html>
+"""

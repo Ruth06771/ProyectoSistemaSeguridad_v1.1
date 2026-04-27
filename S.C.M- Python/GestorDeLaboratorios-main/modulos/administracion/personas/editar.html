@@ -1,0 +1,88 @@
+    html_form = """
+    <!doctype html>
+    <html lang="es">
+    <head>
+        <meta charset="utf-8">
+        <title>Editar Persona</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body>
+    <div class="container my-4">
+        <h2 class="mb-4">Editar Persona</h2>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, msg in messages %}
+              <div class="alert alert-{{ category }}">{{ msg }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST" class="needs-validation" novalidate>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Nombre Completo *</label>
+                    <input type="text" class="form-control" name="nombre_completo" required value="{{ persona.nombre_completo }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Fecha de Nacimiento *</label>
+                    <input type="date" class="form-control" name="fecha_nacimiento" required value="{{ persona.fecha_nacimiento }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Correo Electrónico *</label>
+                    <input type="email" class="form-control" name="correo" required value="{{ persona.correo }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Teléfono Personal</label>
+                    <input type="text" pattern="\\d*" class="form-control" name="telefono_personal" value="{{ persona.telefono_personal }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Documento de Identidad *</label>
+                    <input type="text" class="form-control" name="documento_identidad" required value="{{ persona.documento_identidad }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Sexo *</label>
+                    <select class="form-select" name="sexo" required>
+                        <option value="">-- Seleccione --</option>
+                        <option value="Masculino" {% if persona.sexo == 'Masculino' %}selected{% endif %}>Masculino</option>
+                        <option value="Femenino" {% if persona.sexo == 'Femenino' %}selected{% endif %}>Femenino</option>
+                        <option value="Otro" {% if persona.sexo == 'Otro' %}selected{% endif %}>Otro</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Tipo de Sangre</label>
+                    <input type="text" class="form-control" name="tipo_sangre" value="{{ persona.tipo_sangre }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Persona de Emergencia *</label>
+                    <input type="text" class="form-control" name="persona_emergencia" required value="{{ persona.persona_emergencia }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Teléfono de Emergencia *</label>
+                    <input type="text" pattern="\\d*" class="form-control" name="telefono_emergencia" required value="{{ persona.telefono_emergencia }}">
+                </div>
+            </div>
+            <div class="mt-4 d-flex gap-2">
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">← Cancelar</a>
+                <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+    (() => {
+      'use strict'
+      const forms = document.querySelectorAll('.needs-validation')
+      Array.from(forms).forEach(form => {
+        form.addEventListener('submit', event => {
+          if (!form.checkValidity()) {
+            event.preventDefault()
+            event.stopPropagation()
+          }
+          form.classList.add('was-validated')
+        }, false)
+      })
+    })()
+    </script>
+    </body>
+    </html>
+    """
