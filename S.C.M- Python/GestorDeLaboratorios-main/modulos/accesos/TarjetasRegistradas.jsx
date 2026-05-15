@@ -69,14 +69,55 @@ export default function TarjetasRegistradas() {
   const [tarjetas, setTarjetas] = useState([]);
   const [view, setView] = useState('list'); // 'list' | 'add' | 'edit'
   const [editId, setEditId] = useState(null);
-  const [deleteMsg, setDeleteMsg] = useState('');
+  const [message, setMessage] = useState('');
   const [buscar, setBuscar] = useState('');
 
   // Cargar tarjetas
   const fetchTarjetas = () => {
     fetch('/api/tarjetas', { credentials: 'include' })
       .then(res => res.json())
-      .then(setTarjetas);
+      .then(setTarjetas)
+      .catch(() => setTarjetas([]));
+  };
+
+  const getEstadoText = (estado) => estado === 1 ? 'Activo' : 'Inactivo';
+  const getEstadoBadgeClass = (estado) => estado === 1 ? 'bg-success' : 'bg-secondary';
+
+  const handleAccion = async (tarjeta, accion) => {
+    if (accion === 'eliminada' && !window.confirm('¿Seguro que deseas eliminar esta tarjeta?')) return;
+
+    if (accion === 'alta' || accion === 'baja') {
+      const newEstado = accion === 'alta' ? 1 : 0;
+      setTarjetas(prev => prev.map(t => t.id === tarjeta.id ? { ...t, estado: newEstado } : t));
+    }
+
+    try {
+      const res = await fetch(`/api/tarjetas/${tarjeta.id}/accion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ accion })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const mensajes = {
+          alta: 'Tarjeta dada de Alta',
+          baja: 'Tarjeta dada de Baja',
+          eliminada: 'Tarjeta eliminada correctamente'
+        };
+        setMessage(mensajes[accion] || 'Acción realizada correctamente');
+        if (accion === 'eliminada') {
+          setTarjetas(prev => prev.filter(t => t.id !== tarjeta.id));
+        }
+      } else {
+        setMessage(data.error || `Error al ejecutar acción ${accion}`);
+        fetchTarjetas();
+      }
+    } catch (error) {
+      setMessage('Error de conexión');
+      fetchTarjetas();
+    }
+    setTimeout(() => setMessage(''), 2500);
   };
 
   useEffect(() => {
@@ -97,12 +138,12 @@ export default function TarjetasRegistradas() {
     });
     const data = await res.json();
     if (data.success) {
-      setDeleteMsg('Tarjeta eliminada correctamente');
+      setMessage('Tarjeta eliminada correctamente');
       fetchTarjetas();
     } else {
-      setDeleteMsg(data.error || 'Error al eliminar');
+      setMessage(data.error || 'Error al eliminar');
     }
-    setTimeout(() => setDeleteMsg(''), 2000);
+    setTimeout(() => setMessage(''), 2000);
   };
 
   if (view === 'add') {
@@ -120,7 +161,7 @@ export default function TarjetasRegistradas() {
           <span className="badge bg-info">{tarjetas.length} tarjetas</span>
         </div>
         <div className="card-body p-0">
-          {deleteMsg && <div className="alert alert-info m-3">{deleteMsg}</div>}
+          {message && <div className="alert alert-info m-3">{message}</div>}
           <div className="d-flex justify-content-end p-3">
             <button className="btn btn-primary" onClick={handleAdd}>
               <i className="bi bi-plus-circle me-2"></i> Nueva Tarjeta
@@ -134,6 +175,7 @@ export default function TarjetasRegistradas() {
                   <th>UID</th>
                   <th>Nombre</th>
                   <th>Correo</th>
+                  <th>Estado</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
@@ -145,17 +187,42 @@ export default function TarjetasRegistradas() {
                     <td>{fila.nombre_completo}</td>
                     <td>{fila.correo}</td>
                     <td>
-                      <button className="btn btn-sm btn-warning me-2" title="Editar" onClick={() => handleEdit(fila.id)}>
-                        <i className="bi bi-pencil-square"></i>
-                      </button>
-                      <button className="btn btn-sm btn-danger" title="Eliminar" onClick={() => handleDelete(fila.id)}>
-                        <i className="bi bi-trash"></i>
-                      </button>
+                      <span className={`badge ${getEstadoBadgeClass(fila.estado)}`}>
+                        {getEstadoText(fila.estado)}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="d-flex gap-1 flex-wrap">
+                        <button
+                          className={`btn btn-sm flex-fill ${fila.estado === 1 ? 'btn-success' : 'btn-outline-success'}`}
+                          title="Alta"
+                          onClick={() => handleAccion(fila, 'alta')}
+                        >
+                          Alta
+                        </button>
+                        <button
+                          className={`btn btn-sm flex-fill ${fila.estado === 0 ? 'btn-danger' : 'btn-outline-danger'}`}
+                          title="Baja"
+                          onClick={() => handleAccion(fila, 'baja')}
+                        >
+                          Baja
+                        </button>
+                        <button
+                          className="btn btn-sm btn-outline-danger flex-fill"
+                          title="Eliminar"
+                          onClick={() => handleAccion(fila, 'eliminada')}
+                        >
+                          Eliminada
+                        </button>
+                        <button className="btn btn-sm btn-warning flex-fill" title="Editar" onClick={() => handleEdit(fila.id)}>
+                          <i className="bi bi-pencil-square"></i>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={5} className="text-center text-muted py-4">
+                    <td colSpan={6} className="text-center text-muted py-4">
                       Sin tarjetas para mostrar
                     </td>
                   </tr>

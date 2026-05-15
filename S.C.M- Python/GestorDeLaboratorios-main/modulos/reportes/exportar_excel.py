@@ -1,41 +1,40 @@
-from flask import Flask, request, send_file
+from flask import Blueprint, request, send_file
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from io import BytesIO
 from config.db import get_connection
 
-app = Flask(__name__)
+bp = Blueprint('exportar_excel', __name__)
 
-@app.route('/exportar_excel_tarjetas')
+@bp.route('/exportar_excel_tarjetas')
 def exportar_excel_tarjetas():
     fecha_desde = request.args.get('fecha_desde', '')
     fecha_hasta = request.args.get('fecha_hasta', '')
-    tipo_accion = request.args.get('tipo_accion', '')
-    usuario_responsable = request.args.get('usuario_responsable', '')
+    persona = request.args.get('persona', '')
+    usuario = request.args.get('usuario', '')
     tarjeta = request.args.get('tarjeta', '')
 
-    query = "SELECT * FROM historial_accesos WHERE 1=1"
+    query = "SELECT * FROM historial_tarjetas WHERE 1=1"
     params = []
 
     if fecha_desde:
-        query += " AND fecha_hora >= %s"
+        query += " AND ejecutado_en >= %s"
         params.append(f"{fecha_desde} 00:00:00")
     if fecha_hasta:
-        query += " AND fecha_hora <= %s"
+        query += " AND ejecutado_en <= %s"
         params.append(f"{fecha_hasta} 23:59:59")
-    if tipo_accion:
-        query += " AND accion = %s"
-        params.append(tipo_accion)
-    if usuario_responsable:
-        query += " AND usuario_responsable LIKE %s"
-        params.append(f"%{usuario_responsable}%")
+    if persona:
+        query += " AND nombre_completo LIKE %s"
+        params.append(f"%{persona}%")
+    if usuario:
+        query += " AND ejecutado_por LIKE %s"
+        params.append(f"%{usuario}%")
     if tarjeta:
-        query += " AND tarjeta LIKE %s"
+        query += " AND uid LIKE %s"
         params.append(f"%{tarjeta}%")
 
-    query += " ORDER BY fecha_hora DESC"
+    query += " ORDER BY ejecutado_en DESC"
 
-    # Conectar a la base de datos y ejecutar consulta
     connection = get_connection()
     try:
         cursor = connection.cursor()
@@ -55,48 +54,162 @@ def exportar_excel_tarjetas():
     finally:
         connection.close()
 
-    # Crear Excel
     wb = Workbook()
     ws = wb.active
-    ws.title = "Reporte de Accesos"
+    ws.title = "Historial Registro Personas"
 
-    # Encabezados
-    encabezados = ['ID', 'Fecha y Hora', 'Acción', 'Usuario Responsable', 'Tarjeta RFID', 'Descripción']
-    ws.append(encabezados)
+    headers = ['ID Reg.', 'Tarjeta UID / Credencial', 'Persona Registrada', 'Acción Realizada', 'Usuario Autor / Responsable', 'Fecha de Registro']
+    ws.append(headers)
 
-    # Estilo de encabezado: negrita + fondo gris
     header_font = Font(bold=True)
     header_fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
-    for col_num, cell in enumerate(ws[1], 1):
+    for cell in ws[1]:
         cell.font = header_font
         cell.fill = header_fill
 
-    # Datos
     for row in resultados:
+        # Mapear acción a formato legible
+        accion_mapeada = row.get('accion', '')
+        if accion_mapeada == 'alta':
+            accion_mapeada = 'Alta'
+        elif accion_mapeada == 'baja':
+            accion_mapeada = 'Baja'
+        elif accion_mapeada == 'edicion':
+            accion_mapeada = 'Edición'
+
         ws.append([
-            row['id'],
-            row['fecha_hora'],
-            row['accion'],
-            row['usuario_responsable'],
-            row['tarjeta'],
-            row['descripcion']
+            row.get('id'),
+            row.get('uid') or row.get('uid_tarjeta') or '',
+            row.get('nombre_completo') or '',
+            accion_mapeada,
+            row.get('ejecutado_por') or '',
+            row.get('ejecutado_en') or ''
         ])
 
-    # Autoajustar ancho de columnas
     for column in ws.columns:
         max_length = max(len(str(cell.value)) if cell.value else 0 for cell in column)
         column_letter = column[0].column_letter
         ws.column_dimensions[column_letter].width = max_length + 2
 
-    # Guardar en un buffer para enviar como descarga
     output = BytesIO()
     wb.save(output)
     output.seek(0)
 
-    return send_file(output,
-                     as_attachment=True,
-                     download_name="reporte_accesos.xlsx",
-                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return send_file(
+        output,
+        download_name="historial_altas_bajas_tarjetas.xlsx",
+        as_attachment=True,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
-if __name__ == '__main__':
-    app.run(debug=True)
+@bp.route('/exportar_excel_accesos')
+def exportar_excel_accesos():
+    fecha_desde = request.args.get('fecha_desde', '')
+    fecha_hasta = request.args.get('fecha_hasta', '')
+    tipo_movimiento = request.args.get('tipo_movimiento', '')
+    resultado = request.args.get('resultado', '')
+    credencial = request.args.get('credencial', '')
+    nombre_completo = request.args.get('nombre_completo', '')
+    uid_tarjeta = request.args.get('uid_tarjeta', '')
+
+    query = '''
+    SELECT
+        ra.id,
+        ra.fecha_hora,
+        COALESCE(p.nombre_completo, 'Desconocido') AS persona,
+        tm.nombre AS movimiento,
+        ra.resultado,
+        ra.credencial,
+        ra.tarjeta_uid,
+        ra.descripcion
+    FROM registro_acceso ra
+    LEFT JOIN enrolar e ON ra.enrolar_id = e.id
+    LEFT JOIN personas p ON e.persona_id = p.id
+    LEFT JOIN tipo_movimiento tm ON ra.tipo_movimiento_id = tm.id
+    WHERE 1=1
+    '''
+    params = []
+
+    if fecha_desde:
+        query += " AND ra.fecha_hora >= %s"
+        params.append(f"{fecha_desde} 00:00:00")
+    if fecha_hasta:
+        query += " AND ra.fecha_hora <= %s"
+        params.append(f"{fecha_hasta} 23:59:59")
+    if tipo_movimiento:
+        query += " AND tm.nombre = %s"
+        params.append(tipo_movimiento)
+    if resultado:
+        query += " AND ra.resultado = %s"
+        params.append(resultado)
+    if credencial:
+        query += " AND ra.credencial = %s"
+        params.append(credencial)
+    if nombre_completo:
+        query += " AND p.nombre_completo LIKE %s"
+        params.append(f"%{nombre_completo}%")
+    if uid_tarjeta:
+        query += " AND ra.tarjeta_uid LIKE %s"
+        params.append(f"%{uid_tarjeta}%")
+
+    query += " ORDER BY ra.fecha_hora DESC"
+
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        try:
+            exec_query = query
+            if connection.__class__.__module__.startswith('sqlite3'):
+                exec_query = exec_query.replace('%s', '?')
+            cursor.execute(exec_query, params)
+            resultados = cursor.fetchall()
+            if resultados and hasattr(resultados[0], 'keys'):
+                resultados = [dict(r) for r in resultados]
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+    finally:
+        connection.close()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Reporte de Accesos"
+
+    headers = ['ID', 'Fecha y Hora', 'Persona', 'Movimiento', 'Resultado', 'Credencial', 'UID Tarjeta', 'Descripción']
+    ws.append(headers)
+
+    header_font = Font(bold=True)
+    header_fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for row in resultados:
+        ws.append([
+            row.get('id'),
+            row.get('fecha_hora'),
+            row.get('persona'),
+            row.get('movimiento'),
+            row.get('resultado'),
+            row.get('credencial'),
+            row.get('tarjeta_uid'),
+            row.get('descripcion')
+        ])
+
+    for column in ws.columns:
+        max_length = max(len(str(cell.value)) if cell.value else 0 for cell in column)
+        column_letter = column[0].column_letter
+        ws.column_dimensions[column_letter].width = max_length + 2
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        download_name="reporte_accesos.xlsx",
+        as_attachment=True,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )

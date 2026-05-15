@@ -16,6 +16,31 @@ def try_get_connection():
         return None, str(e)
 
 
+def ensure_persona_creation_history(connection):
+    """Backfill historial_acciones for personas missing a create record."""
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO historial_acciones (modulo, entidad_id, entidad_tipo, accion, usuario, descripcion)
+            SELECT 'personas', p.id, 'persona', 'create', 'Sistema', 'Registro de persona existente sin historial de creación'
+            FROM personas p
+            WHERE NOT EXISTS (
+                SELECT 1 FROM historial_acciones ha
+                WHERE ha.entidad_id = p.id
+                  AND ha.entidad_tipo = 'persona'
+                  AND LOWER(ha.accion) IN ('create', 'crear')
+            )
+        """)
+        connection.commit()
+    except Exception:
+        pass
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+
+
 # Listar personas
 @personas_api.route('/api/personas', methods=['GET'])
 def listar_personas():
@@ -67,7 +92,24 @@ def registrar_persona():
         'nombre_completo', 'fecha_nacimiento', 'correo', 'telefono_personal',
         'documento_identidad', 'sexo', 'tipo_sangre', 'rol', 'estado', 'persona_emergencia', 'telefono_emergencia'
     ]
-    valores = [data.get(campo) for campo in campos]
+    estado_value = data.get('estado', 1)
+    if estado_value not in (0, 1, '0', '1'):
+        estado_value = 1
+    else:
+        estado_value = int(estado_value)
+    valores = [
+        data.get('nombre_completo'),
+        data.get('fecha_nacimiento'),
+        data.get('correo'),
+        data.get('telefono_personal'),
+        data.get('documento_identidad'),
+        data.get('sexo'),
+        data.get('tipo_sangre'),
+        data.get('rol'),
+        estado_value,
+        data.get('persona_emergencia'),
+        data.get('telefono_emergencia'),
+    ]
     connection, err = try_get_connection()
     if err:
         return jsonify({'error': 'db_connection', 'message': err}), 500
@@ -101,7 +143,7 @@ def registrar_persona():
                 # perform update
                 sql = """
                     UPDATE personas SET nombre_completo=%s, fecha_nacimiento=%s, correo=%s, telefono_personal=%s,
-                    documento_identidad=%s, sexo=%s, tipo_sangre=%s, rol=%s, persona_emergencia=%s, telefono_emergencia=%s
+                    documento_identidad=%s, sexo=%s, tipo_sangre=%s, rol=%s, estado=%s, persona_emergencia=%s, telefono_emergencia=%s
                     WHERE id=%s
                 """
                 if connection.__class__.__module__.startswith('sqlite3'):
@@ -198,6 +240,20 @@ def editar_persona(id):
     try:
         cursor = connection.cursor()
         try:
+            placeholder = '%s'
+            params = (id,)
+            if connection.__class__.__module__.startswith('sqlite3'):
+                placeholder = '?'
+            if data.get('estado') not in (0, 1, '0', '1'):
+                cursor.execute(f"SELECT estado FROM personas WHERE id = {placeholder}", params)
+                existing = cursor.fetchone()
+                if existing:
+                    valores[8] = existing[0] if isinstance(existing, (list, tuple)) else (existing.get('estado') if hasattr(existing, 'get') else existing)
+                else:
+                    valores[8] = 1
+            else:
+                valores[8] = int(data.get('estado'))
+
             sql = """
                 UPDATE personas SET nombre_completo=%s, fecha_nacimiento=%s, correo=%s, telefono_personal=%s,
                 documento_identidad=%s, sexo=%s, tipo_sangre=%s, rol=%s, estado=%s, persona_emergencia=%s, telefono_emergencia=%s
@@ -209,6 +265,46 @@ def editar_persona(id):
             connection.commit()
             try:
                 log_action(connection, 'personas', entidad_id=id, entidad_tipo='persona', accion='update', usuario=session.get('usuario') if session else None, descripcion=f"Actualizada persona id={id}")
+            except Exception:
+                pass
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        return jsonify({'success': True})
+    except Exception:
+        traceback.print_exc()
+        return jsonify({'error': 'update_failed'}), 500
+    finally:
+        connection.close()
+
+
+# Actualizar solo el estado de una persona
+@personas_api.route('/api/personas/<int:id>/estado', methods=['PUT'])
+def actualizar_estado_persona(id):
+    data = request.get_json() or {}
+    estado = data.get('estado')
+    if estado not in (0, 1, '0', '1'):
+        return jsonify({'success': False, 'error': 'Estado inválido. Debe ser 0 o 1.'}), 400
+    estado = int(estado)
+
+    connection, err = try_get_connection()
+    if err:
+        return jsonify({'error': 'db_connection', 'message': err}), 500
+    try:
+        cursor = connection.cursor()
+        try:
+            placeholder = '%s'
+            params = (estado, id)
+            if connection.__class__.__module__.startswith('sqlite3'):
+                placeholder = '?'
+            sql = f"UPDATE personas SET estado = {placeholder} WHERE id = {placeholder}"
+            cursor.execute(sql, params)
+            connection.commit()
+            try:
+                accion = 'activate' if estado == 1 else 'deactivate'
+                log_action(connection, 'personas', entidad_id=id, entidad_tipo='persona', accion=accion, usuario=session.get('usuario') if session else None, descripcion=f"{'Activada' if estado == 1 else 'Inactivada'} persona id={id}")
             except Exception:
                 pass
         finally:
@@ -295,3 +391,91 @@ def search_personas_with_tarjeta():
         return jsonify(results)
     finally:
         conn.close()
+
+
+# Reporte: Historial de acciones en personas
+# Retorna todas las acciones realizadas en personas
+@personas_api.route('/api/reportes/personas-registradas-sin-tarjeta', methods=['GET'])
+def reporte_personas_sin_tarjeta():
+    """
+    Retorna un reporte de acciones en personas.
+    
+    Lógica:
+    1. Une historial_acciones con personas para obtener todas las acciones.
+    2. Aplica filtros opcionales de búsqueda, responsable y fecha.
+    
+    Retorna: id, documento_identidad, nombre_completo, fecha_hora, usuario, accion
+    """
+    search = (request.args.get('buscar') or '').strip()
+    responsable = (request.args.get('responsable') or '').strip()
+    fecha_desde = (request.args.get('fecha_desde') or '').strip()
+
+    connection, err = try_get_connection()
+    if err:
+        return jsonify({'error': 'db_connection', 'message': err}), 500
+    
+    try:
+        cursor = connection.cursor()
+        try:
+            placeholder = '%s'
+            if connection.__class__.__module__.startswith('sqlite3'):
+                placeholder = '?'
+
+            sql = """
+            SELECT
+                ha.id,
+                p.documento_identidad,
+                p.nombre_completo,
+                ha.fecha_hora,
+                ha.usuario,
+                ha.accion
+            FROM historial_acciones ha
+            JOIN personas p ON ha.entidad_id = p.id
+            WHERE ha.entidad_tipo = 'persona'
+            """
+
+            where_clauses = []
+            params = []
+
+            if search:
+                where_clauses.append(f"(p.documento_identidad LIKE {placeholder} OR p.nombre_completo LIKE {placeholder})")
+                like_value = f"%{search}%"
+                params.extend([like_value, like_value])
+
+            if responsable:
+                where_clauses.append(f"ha.usuario LIKE {placeholder}")
+                params.append(f"%{responsable}%")
+
+            if fecha_desde:
+                if connection.__class__.__module__.startswith('sqlite3'):
+                    where_clauses.append(f"date(ha.fecha_hora) >= date({placeholder})")
+                else:
+                    where_clauses.append(f"date(ha.fecha_hora) >= {placeholder}")
+                params.append(fecha_desde)
+
+            if where_clauses:
+                sql += "\nAND " + " AND ".join(where_clauses)
+
+            sql += "\nORDER BY ha.fecha_hora DESC, p.nombre_completo ASC"
+
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+            column_names = [desc[0] for desc in cursor.description] if cursor.description else []
+
+            # Normalizar resultados a dicts, tanto si el cursor entrega dict-like rows como tuplas.
+            if rows and hasattr(rows[0], 'keys'):
+                resultados = [dict(r) for r in rows]
+            else:
+                resultados = [dict(zip(column_names, row)) for row in rows]
+
+            return jsonify(resultados)
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+    except Exception:
+        traceback.print_exc()
+        return jsonify({'error': 'query_failed', 'message': str(traceback.format_exc())}), 500
+    finally:
+        connection.close()

@@ -14,6 +14,7 @@ import PerfilPersona from '../modulos/enrolar/PerfilPersona';
 import Enrolar from '../modulos/enrolar/Enrolar';
 import BitacoraViewer from '../modulos/administracion/BitacoraViewer';
 import ReportesIngresos from '../modulos/reportes/ReportesIngresos';
+import PersonasRegistradasSinTarjeta from '../modulos/reportes/PersonasRegistradasSinTarjeta';
 import Permisos from '../modulos/administracion/Permisos';
 import Roles from '../modulos/administracion/Roles';
 import Dispositivos from '../modulos/administracion/Dispositivos';
@@ -29,6 +30,9 @@ export default function AdminDashboard({ usuario, onLogout }) {
 
   const [resultadosTarjetas, setResultadosTarjetas] = useState([]);
   const [filtrosTarjetas, setFiltrosTarjetas] = useState({});
+
+  const [resultadosPersonasSinTarjeta, setResultadosPersonasSinTarjeta] = useState([]);
+  const [filtrosPersonasSinTarjeta, setFiltrosPersonasSinTarjeta] = useState({});
 
   // Helpers
   const buildQuery = (obj) => {
@@ -71,16 +75,31 @@ export default function AdminDashboard({ usuario, onLogout }) {
     fetchStats();
   }, []);
 
+  // Auto-cargar datos de tarjetas cuando se navega a la vista de historial
+  useEffect(() => {
+    if (view === 'tarjetas_historial' && resultadosTarjetas.length === 0) {
+      fetchTarjetas({});
+    }
+  }, [view]);
+
+  // Auto-cargar datos de accesos cuando se navega a la vista de historial
+  useEffect(() => {
+    if (view === 'accesos_historial' && resultadosAccesos.length === 0) {
+      fetchAccesos({});
+    }
+  }, [view]);
+
   // Fetch reportes
   const fetchAccesos = async (filtros = {}) => {
     setFiltrosAccesos(filtros);
     const q = buildQuery(filtros);
-    const url = `/api/reportes/accesos_historial${q ? `?${q}` : ''}`;
+    // Add cache-busting parameter
+    const timestamp = new Date().getTime();
+    const separator = q ? '&' : '?';
+    const url = `/api/reportes/accesos_historial${q ? `?${q}` : ''}${separator}_t=${timestamp}`;
     try {
       const res = await fetch(url, { credentials: 'include' });
-  const data = await res.json();
-  // debug: log returned rows for diagnostics
-  // debug logs removed in cleanup
+      const data = await res.json();
       // normalize response: backend may return array or { value: [...], Count }
       const rows = Array.isArray(data) ? data : (data && data.value ? data.value : []);
       setResultadosAccesos(rows || []);
@@ -91,23 +110,39 @@ export default function AdminDashboard({ usuario, onLogout }) {
 
   const fetchTarjetas = async (filtros = {}) => {
     setFiltrosTarjetas(filtros);
-    const q = buildQuery(filtros);
-    const url = `/api/reportes/tarjetas_historial${q ? `?${q}` : ''}`;
     try {
+      const q = buildQuery(filtros);
+      const timestamp = new Date().getTime();
+      const separator = q ? '&' : '?';
+      const url = `/api/reportes/tarjetas_historial${q ? `?${q}` : ''}${separator}_t=${timestamp}`;
       const res = await fetch(url, { credentials: 'include' });
-  const data = await res.json();
-  // debug logs removed in cleanup
+      const data = await res.json();
       const rows = Array.isArray(data) ? data : (data && data.value ? data.value : []);
       setResultadosTarjetas(rows || []);
     } catch (err) {
+      console.error('Error fetching tarjetas historial:', err);
       setResultadosTarjetas([]);
+    }
+  };
+
+  const fetchPersonasSinTarjeta = async (filtros = {}) => {
+    setFiltrosPersonasSinTarjeta(filtros);
+    const url = `/api/reportes/personas-registradas-sin-tarjeta`;
+    try {
+      const res = await fetch(url, { credentials: 'include' });
+      const data = await res.json();
+      const rows = Array.isArray(data) ? data : (data && data.value ? data.value : []);
+      setResultadosPersonasSinTarjeta(rows || []);
+    } catch (err) {
+      console.error('Error fetching personas sin tarjeta:', err);
+      setResultadosPersonasSinTarjeta([]);
     }
   };
 
   // Export helpers
   const exportAccesosExcel = (filtros = {}) => {
     const q = buildQuery(filtros);
-    window.open(`/exportar_excel_tarjetas?${q}`, '_blank');
+    window.open(`/exportar_excel_accesos?${q}`, '_blank');
   };
 
   const exportAccesosPDF = (filtros = {}) => {
@@ -156,6 +191,16 @@ export default function AdminDashboard({ usuario, onLogout }) {
       filtros={filtrosAccesos}
       onExportExcel={() => exportAccesosExcel(filtrosAccesos)}
       onExportPDF={() => exportAccesosPDF(filtrosAccesos)}
+    />
+  );
+  else if (view === 'personas_registradas_sin_tarjeta') content = (
+    <PersonasRegistradasSinTarjeta
+      onVolver={() => setView('dashboard')}
+      onFiltrar={fetchPersonasSinTarjeta}
+      resultados={resultadosPersonasSinTarjeta}
+      filtros={filtrosPersonasSinTarjeta}
+      onExportExcel={() => exportAccesosExcel(filtrosPersonasSinTarjeta)}
+      onExportPDF={() => exportAccesosPDF(filtrosPersonasSinTarjeta)}
     />
   );
   // The standalone "registro_persona_emergencia" view was removed from main navigation
@@ -208,18 +253,20 @@ export default function AdminDashboard({ usuario, onLogout }) {
                         <thead>
                           <tr>
                             <th>Fecha</th>
-                            <th>Acción</th>
-                            <th>Usuario</th>
-                            <th>Tarjeta</th>
+                            <th>Persona</th>
+                            <th>Movimiento</th>
+                            <th>Resultado</th>
+                            <th>Credencial</th>
                           </tr>
                         </thead>
                         <tbody>
                           {ultimosAccesos.map((r, idx) => (
                             <tr key={idx}>
                               <td>{r.fecha_hora || r.fecha || '-'}</td>
-                              <td>{r.accion || r.tipo || '-'}</td>
-                              <td>{r.usuario_responsable || r.responsable || '-'}</td>
-                              <td>{r.tarjeta || r.uid || '-'}</td>
+                              <td>{r.persona || r.nombre || r.usuario_responsable || '-'}</td>
+                              <td>{r.movimiento || r.accion || r.tipo || '-'}</td>
+                              <td>{r.resultado || '-'}</td>
+                              <td>{r.credencial || '-'}</td>
                             </tr>
                           ))}
                         </tbody>

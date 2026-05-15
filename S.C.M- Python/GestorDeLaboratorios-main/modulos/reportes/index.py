@@ -13,7 +13,7 @@ def admin_dashboard():
 
 @app.route('/accesos_historial')
 def accesos_historial():
-    return "<h3>Reporte de Historial de Accesos</h3>"
+    return "<h3>Historial de Accesos</h3>"
 
 @app.route('/tarjetas_historial')
 def tarjetas_historial():

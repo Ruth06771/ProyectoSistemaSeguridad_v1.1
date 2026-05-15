@@ -1,7 +1,7 @@
 from flask import Blueprint, request, make_response
 from io import BytesIO
 try:
-    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.pagesizes import letter, landscape
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
     from reportlab.lib import colors
     from reportlab.lib.styles import getSampleStyleSheet
@@ -23,31 +23,65 @@ def reporte_tarjetas():
     # Obtener filtros
     fecha_desde = request.args.get('fecha_desde', '')
     fecha_hasta = request.args.get('fecha_hasta', '')
-    accion = request.args.get('accion', '')
+    persona = request.args.get('persona', '')
     usuario = request.args.get('usuario', '')
     tarjeta = request.args.get('tarjeta', '')
 
     # Construir consulta
-    query = "SELECT * FROM historial_tarjetas WHERE 1=1"
+    query = """
+    SELECT
+        ht.id,
+        COALESCE(ht.nombre_completo, '') AS nombre_completo,
+        ht.uid AS uid_tarjeta,
+        t.pin AS pin,
+        COALESCE(
+            (SELECT pa.nombre
+             FROM perfil_acceso_lab pa
+             WHERE pa.id = (
+                 SELECT e.perfil_acceso_lab_id
+                 FROM enrolar e
+                 WHERE (e.tarjeta_id = ht.tarjeta_id OR e.tarjeta_uid = ht.uid)
+                   AND e.perfil_acceso_lab_id IS NOT NULL
+                 ORDER BY e.fecha_de_registro DESC
+                 LIMIT 1
+             )
+            ),
+            ''
+        ) AS perfil,
+        COALESCE(
+            (SELECT e.estado
+             FROM enrolar e
+             WHERE (e.tarjeta_id = ht.tarjeta_id OR e.tarjeta_uid = ht.uid)
+             ORDER BY e.fecha_de_registro DESC
+             LIMIT 1
+            ),
+            t.estado
+        ) AS estado,
+        ht.ejecutado_por AS responsable,
+        ht.fecha_hora
+    FROM historial_tarjetas ht
+    LEFT JOIN tarjetas t ON t.id = ht.tarjeta_id OR t.uid = ht.uid
+    WHERE 1=1
+    """
     params = []
 
     if fecha_desde:
-        query += " AND fecha_hora >= %s"
+        query += " AND ht.fecha_hora >= %s"
         params.append(fecha_desde + " 00:00:00")
     if fecha_hasta:
-        query += " AND fecha_hora <= %s"
+        query += " AND ht.fecha_hora <= %s"
         params.append(fecha_hasta + " 23:59:59")
-    if accion:
-        query += " AND accion = %s"
-        params.append(accion)
+    if persona:
+        query += " AND ht.nombre_completo LIKE %s"
+        params.append(f"%{persona}%")
     if usuario:
-        query += " AND ejecutado_por LIKE %s"
+        query += " AND ht.ejecutado_por LIKE %s"
         params.append(f"%{usuario}%")
     if tarjeta:
-        query += " AND uid LIKE %s"
+        query += " AND ht.uid LIKE %s"
         params.append(f"%{tarjeta}%")
 
-    query += " ORDER BY fecha_hora DESC"
+    query += " ORDER BY ht.fecha_hora DESC"
 
     # Conectar y ejecutar consulta
     connection = get_connection()
@@ -69,26 +103,28 @@ def reporte_tarjetas():
     finally:
         connection.close()
 
-    # Crear PDF
+    # Crear PDF con orientación landscape
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=80)
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=80)
     elements = []
 
     styles = getSampleStyleSheet()
-    title = Paragraph("Reporte de Altas y Bajas de Tarjetas RFID", styles['Title'])
+    title = Paragraph("Historial de Enrolamiento", styles['Title'])
     elements.append(title)
     elements.append(Spacer(1, 12))
 
     # Construir tabla de datos
-    data = [['ID', 'UID', 'Nombre', 'Acción', 'Ejecutado por', 'Fecha y Hora']]
+    data = [['ID', 'Nombre de la Persona', 'Tarjeta', 'PIN', 'Perfil', 'Fecha y Hora', 'Responsable', 'Estado']]
     for row in resultados:
         data.append([
-            row.get('id'),
-            row.get('uid') or row.get('TarjetaUID') or '',
-            row.get('nombre_completo') or row.get('Nombre') or '',
-            row.get('accion') or '',
-            row.get('ejecutado_por') or row.get('responsable') or '',
-            str(row.get('fecha_hora') or '')
+            str(row.get('id') or ''),
+            str(row.get('nombre_completo') or ''),
+            str(row.get('uid_tarjeta') or row.get('uid') or ''),
+            str(row.get('pin') or ''),
+            str(row.get('perfil') or ''),
+            str(row.get('fecha_hora') or ''),
+            str(row.get('responsable') or ''),
+            str(row.get('estado') if row.get('estado') is not None else '')
         ])
 
     table = Table(data, repeatRows=1)
@@ -97,7 +133,8 @@ def reporte_tarjetas():
         ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('GRID', (0,0), (-1,-1), 1, colors.black),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold')
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
     ]))
     elements.append(table)
 

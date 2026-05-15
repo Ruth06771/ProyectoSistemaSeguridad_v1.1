@@ -1,42 +1,39 @@
 import React, { useState, useEffect } from 'react';
 
 export default function TipoRegistro({ onGoHome }) {
-  const [dispositivos, setDispositivos] = useState([]);
+  const [registros, setRegistros] = useState([]);
 
   useEffect(() => {
-    // Cargar tipos de dispositivo (solo columnas id, nombre, estado)
-    fetch('/api/tipo_dispositivo', { credentials: 'include' })
-      .then(res => {
-        if (!res.ok) throw new Error('Error al cargar tipos de dispositivo');
-        return res.json();
-      })
-      .then(data => setDispositivos(data || []))
-      .catch(err => console.error(err));
+    // Cargar tipos de registro hardcodeados
+    setRegistros([
+      { id: 1, nombre: 'Pin', perfil_fk: 1, estado: 1 },
+      { id: 2, nombre: 'Tarjeta', perfil_fk: 1, estado: 1 }
+    ]);
   }, []);
 
-  function toggleDispositivoEstado(item) {
+  function toggleRegistroEstado(item) {
     const newEstado = item.estado === 1 || item.estado === '1' ? 0 : 1;
     // Optimistic update
-    setDispositivos(prev => prev.map(d => (d.id === item.id ? { ...d, estado: newEstado } : d)));
-    fetch(`/api/tipo_dispositivo/${item.id}`, {
+    setRegistros(prev => prev.map(d => (d.id === item.id ? { ...d, estado: newEstado } : d)));
+    fetch(`/api/tipo_registro/${item.id}`, {
       method: 'PUT',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre: item.nombre, estado: newEstado })
+      body: JSON.stringify({ nombre: item.nombre, perfil_fk: item.perfil_fk, estado: newEstado })
     }).then(res => {
       if (!res.ok) {
-        setDispositivos(prev => prev.map(d => (d.id === item.id ? { ...d, estado: item.estado } : d)));
+        setRegistros(prev => prev.map(d => (d.id === item.id ? { ...d, estado: item.estado } : d)));
       }
     }).catch(() => {
-      setDispositivos(prev => prev.map(d => (d.id === item.id ? { ...d, estado: item.estado } : d)));
+      setRegistros(prev => prev.map(d => (d.id === item.id ? { ...d, estado: item.estado } : d)));
     });
   }
 
-  function eliminarDispositivo(id) {
-    if (!window.confirm('¿Eliminar este tipo de dispositivo?')) return;
-    fetch(`/api/tipo_dispositivo/${id}`, { method: 'DELETE', credentials: 'include' })
+  function eliminarRegistro(id) {
+    if (!window.confirm('¿Eliminar este tipo de registro?')) return;
+    fetch(`/api/tipo_registro/${id}`, { method: 'DELETE', credentials: 'include' })
       .then(res => res.json())
-      .then(() => setDispositivos(prev => prev.filter(d => d.id !== id)))
+      .then(() => setRegistros(prev => prev.filter(d => d.id !== id)))
       .catch(err => console.error(err));
   }
 
@@ -49,30 +46,32 @@ export default function TipoRegistro({ onGoHome }) {
           <thead>
             <tr>
               <th>ID</th>
-              <th>Nombre</th>
+              <th>Nombre</th> 
+              <th>Perfil (FK)</th>
               <th>Estado</th>
               <th style={{ width: '160px' }}>Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {dispositivos.map(d => (
+            {registros.map(d => (
               <tr key={d.id}>
                 <td>{d.id}</td>
                 <td>{d.nombre}</td>
+                <td>{d.perfil_fk}</td>
                 <td>{d.estado === 1 || d.estado === '1' ? 'Activo' : 'Inactivo'}</td>
                 <td>
-                  <button className="btn btn-sm btn-outline-primary me-2" onClick={() => toggleDispositivoEstado(d)}>
+                  <button className="btn btn-sm btn-outline-primary me-2" onClick={() => toggleRegistroEstado(d)}>
                     Toggle
                   </button>
-                  <button className="btn btn-sm btn-outline-danger" onClick={() => eliminarDispositivo(d.id)}>
+                  <button className="btn btn-sm btn-outline-danger" onClick={() => eliminarRegistro(d.id)}>
                     Eliminar
                   </button>
                 </td>
               </tr>
             ))}
-            {dispositivos.length === 0 && (
+            {registros.length === 0 && (
               <tr>
-                <td colSpan={4} className="text-center text-muted">No hay tipos de dispositivo registrados.</td>
+                <td colSpan={5} className="text-center text-muted">No hay tipos de registro registrados.</td>
               </tr>
             )}
           </tbody>

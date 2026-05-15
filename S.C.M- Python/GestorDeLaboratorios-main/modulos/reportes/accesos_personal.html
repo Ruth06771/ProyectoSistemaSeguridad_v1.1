@@ -26,24 +26,39 @@
         <label class="form-label">Movimiento</label>
         <select name="tipo_movimiento" class="form-select">
             <option value="">-- Todos --</option>
-            <option value="acceso permitido" {% if tipo_movimiento=='acceso permitido' %}selected{% endif %}>Acceso Permitido</option>
-            <option value="acceso denegado" {% if tipo_movimiento=='acceso denegado' %}selected{% endif %}>Acceso Denegado</option>
-            <option value="salida" {% if tipo_movimiento=='salida' %}selected{% endif %}>Salida</option>
+            <option value="Entrada" {% if tipo_movimiento=='Entrada' %}selected{% endif %}>Entrada</option>
+            <option value="Salida" {% if tipo_movimiento=='Salida' %}selected{% endif %}>Salida</option>
         </select>
     </div>
     <div class="col-md-2">
-        <label class="form-label">Nombre</label>
-        <input type="text" name="nombre_completo" class="form-control" value="{{ nombre_completo }}">
+        <label class="form-label">Resultado</label>
+        <select name="resultado" class="form-select">
+            <option value="">-- Todos --</option>
+            <option value="Permitido" {% if resultado=='Permitido' %}selected{% endif %}>Permitido</option>
+            <option value="Denegado" {% if resultado=='Denegado' %}selected{% endif %}>Denegado</option>
+        </select>
     </div>
     <div class="col-md-2">
+        <label class="form-label">Credencial</label>
+        <select name="credencial" class="form-select">
+            <option value="">-- Todas --</option>
+            <option value="Tarjeta" {% if credencial=='Tarjeta' %}selected{% endif %}>Tarjeta</option>
+            <option value="PIN" {% if credencial=='PIN' %}selected{% endif %}>PIN</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label class="form-label">Persona</label>
+        <input type="text" name="nombre_completo" class="form-control" value="{{ nombre_completo }}">
+    </div>
+    <div class="col-md-3">
         <label class="form-label">UID Tarjeta</label>
         <input type="text" name="uid_tarjeta" class="form-control" value="{{ uid_tarjeta }}">
     </div>
     <div class="col-12 d-flex gap-2 mt-2">
         <button class="btn btn-primary">🔍 Filtrar</button>
         <a href="{{ url_for('accesos_personal') }}" class="btn btn-secondary">🔄 Limpiar</a>
-        <a href="/exportar_excel_personal?{{ request.query_string.decode('utf-8') }}" class="btn btn-success">📥 Exportar a Excel</a>
-        <a href="/exportar_pdf_personal?{{ request.query_string.decode('utf-8') }}" class="btn btn-danger">📄 Exportar a PDF</a>
+        <a href="/exportar_excel_accesos?{{ request.query_string.decode('utf-8') }}" class="btn btn-success">📥 Exportar a Excel</a>
+        <a href="/reporte_accesos_personal?{{ request.query_string.decode('utf-8') }}" class="btn btn-danger">📄 Exportar a PDF</a>
     </div>
 </form>
 
@@ -52,11 +67,11 @@
         <tr>
             <th>ID</th>
             <th>Fecha y Hora</th>
+            <th>Persona</th>
             <th>Movimiento</th>
-            <th>Nombre</th>
-            <th>Documento</th>
+            <th>Resultado</th>
+            <th>Credencial</th>
             <th>UID Tarjeta</th>
-            <th>Registrado Por</th>
             <th>Descripción</th>
         </tr>
     </thead>
@@ -65,12 +80,12 @@
         <tr>
             <td>{{ row.id }}</td>
             <td>{{ row.fecha_hora }}</td>
-            <td>{{ row.tipo_movimiento }}</td>
             <td>{{ row.nombre_completo }}</td>
-            <td>{{ row.documento_identidad }}</td>
-            <td>{{ row.uid_tarjeta }}</td>
-            <td>{{ row.registrado_por }}</td>
-            <td>{{ row.descripcion }}</td>
+            <td>{{ row.tipo_movimiento or '-' }}</td>
+            <td>{{ row.resultado or '-' }}</td>
+            <td>{{ row.credencial or '-' }}</td>
+            <td>{{ row.tarjeta_uid or '-' }}</td>
+            <td>{{ row.descripcion or '-' }}</td>
         </tr>
         {% endfor %}
     </tbody>

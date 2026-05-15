@@ -6,6 +6,23 @@ import sqlite3
 enrolar_api = Blueprint('enrolar_api', __name__)
 
 
+def _sql_placeholder(conn):
+    return '?' if conn.__class__.__module__.startswith('sqlite3') else '%s'
+
+
+def _apply_placeholder(sql, conn):
+    return sql.replace('%s', '?') if conn.__class__.__module__.startswith('sqlite3') else sql
+
+
+def _row_to_dict(cursor, row):
+    if row is None:
+        return None
+    if hasattr(row, 'keys'):
+        return dict(row)
+    cols = [c[0] for c in cursor.description] if cursor.description else []
+    return {cols[i]: row[i] for i in range(len(cols))}
+
+
 @enrolar_api.route('/api/perfil_acceso_lab', methods=['GET'])
 def listar_perfil_acceso_lab():
     """Devuelve una lista de perfiles de acceso a laboratorios (id, nombre, estado)."""
@@ -38,7 +55,7 @@ def listar_perfil_acceso_lab():
         try:
             conn.close()
         except Exception:
-            pass
+            pass 
 
 
 @enrolar_api.route('/api/enrolar', methods=['POST'])
@@ -229,10 +246,12 @@ def enrolar_persona_tarjeta():
                     except Exception:
                         return jsonify({'error': 'duplicate_uid', 'message': 'El UID de la tarjeta ya existe y no se pudo recuperar'}), 400
 
-            # Insert enrolar record linking persona and tarjeta (uses tarjeta_uid)
+            # Insert enrolar record linking persona and tarjeta (uses tarjeta_uid) and track action state
             try:
-                enrolar_sql = "INSERT INTO enrolar (persona_id, tarjeta_uid, perfil_acceso_lab_id) VALUES (%s, %s, %s)"
-                enrolar_vals = (persona_id, tarjeta.get('uid'), perfil.get('perfil_acceso_lab_id') if perfil and isinstance(perfil, dict) else None)
+                action_value = 'activo'
+                perfil_access_id = perfil.get('perfil_acceso_lab_id') if perfil and isinstance(perfil, dict) else None
+                enrolar_sql = "INSERT INTO enrolar (persona_id, tarjeta_uid, tarjeta_id, perfil_acceso_lab_id, accion) VALUES (%s, %s, %s, %s, %s)"
+                enrolar_vals = (persona_id, tarjeta.get('uid'), tarjeta_id, perfil_access_id, action_value)
                 if conn.__class__.__module__.startswith('sqlite3'):
                     enrolar_sql = enrolar_sql.replace('%s', '?')
                 cur.execute(enrolar_sql, enrolar_vals)
@@ -240,6 +259,23 @@ def enrolar_persona_tarjeta():
             except Exception:
                 # non-critical, continue but set enrolar_id to None
                 enrolar_id = None
+
+            # Insert historial_tarjetas entry for the enrollment action
+            try:
+                historial_sql = "INSERT INTO historial_tarjetas (tarjeta_id, uid, nombre_completo, accion, ejecutado_por, descripcion) VALUES (%s, %s, %s, %s, %s, %s)"
+                historial_vals = (
+                    tarjeta_id,
+                    tarjeta.get('uid'),
+                    persona.get('nombre_completo') or tarjeta.get('nombre_completo'),
+                    'alta',
+                    session.get('usuario') if session else None,
+                    f"Enrolada persona_id={persona_id} con tarjeta uid={tarjeta.get('uid')}"
+                )
+                if conn.__class__.__module__.startswith('sqlite3'):
+                    historial_sql = historial_sql.replace('%s', '?')
+                cur.execute(historial_sql, historial_vals)
+            except Exception:
+                pass
 
             # Insert perfil (opcional)
             perfil_id = None
@@ -287,3 +323,172 @@ def enrolar_persona_tarjeta():
             conn.close()
         except Exception:
             pass
+
+
+@enrolar_api.route('/api/enrolar', methods=['GET'])
+def listar_enrolamientos():
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        try:
+            sql = '''
+            SELECT
+                e.id AS enrolar_id,
+                e.persona_id,
+                e.tarjeta_id,
+                e.tarjeta_uid,
+                e.perfil_acceso_lab_id,
+                e.estado AS enrolar_estado,
+                e.accion AS enrolar_accion,
+                e.fecha_registro,
+                p.nombre_completo AS persona_nombre,
+                p.correo AS persona_correo,
+                p.documento_identidad AS persona_documento,
+                p.tipo_sangre AS persona_tipo_sangre,
+                p.estado AS persona_estado,
+                t.uid AS tarjeta_uid_real,
+                t.pin AS tarjeta_pin,
+                t.estado AS tarjeta_estado,
+                pa.nombre AS perfil_nombre
+            FROM enrolar e
+            LEFT JOIN personas p ON p.id = e.persona_id
+            LEFT JOIN tarjetas t ON t.id = e.tarjeta_id OR (e.tarjeta_uid IS NOT NULL AND t.uid = e.tarjeta_uid)
+            LEFT JOIN perfil_acceso_lab pa ON pa.id = e.perfil_acceso_lab_id
+            ORDER BY e.fecha_registro DESC
+            '''
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            results = []
+            for r in rows:
+                row = _row_to_dict(cursor, r)
+                results.append({
+                    'id': row.get('enrolar_id'),
+                    'persona_id': row.get('persona_id'),
+                    'tarjeta_id': row.get('tarjeta_id'),
+                    'tarjeta_uid': row.get('tarjeta_uid_real') or row.get('tarjeta_uid'),
+                    'perfil_id': row.get('perfil_acceso_lab_id'),
+                    'perfil': row.get('perfil_nombre'),
+                    'accion': row.get('enrolar_accion'),
+                    'estado': row.get('enrolar_estado'),
+                    'fecha_de_registro': row.get('fecha_registro'),
+                    'nombre_completo': row.get('persona_nombre'),
+                    'correo': row.get('persona_correo'),
+                    'documento_identidad': row.get('persona_documento'),
+                    'tipo_sangre': row.get('persona_tipo_sangre'),
+                    'persona_estado': row.get('persona_estado'),
+                    'pin': row.get('tarjeta_pin'),
+                    'tarjeta_estado': row.get('tarjeta_estado')
+                })
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        return jsonify(results)
+    finally:
+        connection.close()
+
+
+@enrolar_api.route('/api/enrolar/<int:id>', methods=['PUT'])
+def actualizar_enrolar(id):
+    data = request.get_json() or {}
+    persona = data.get('persona', {})
+    tarjeta = data.get('tarjeta', {})
+    perfil = data.get('perfil')
+    estado = data.get('estado')
+    accion = data.get('accion')
+
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        try:
+            placeholder = _sql_placeholder(connection)
+            cursor.execute(_apply_placeholder('SELECT persona_id, tarjeta_id, tarjeta_uid FROM enrolar WHERE id = %s', connection), (id,))
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({'error': 'not_found'}), 404
+
+            persona_id = row[0] if isinstance(row, (list, tuple)) else row.get('persona_id')
+            tarjeta_id = row[1] if isinstance(row, (list, tuple)) else row.get('tarjeta_id')
+            tarjeta_uid = row[2] if isinstance(row, (list, tuple)) else row.get('tarjeta_uid')
+
+            if persona_id and persona:
+                campos = [
+                    'nombre_completo', 'fecha_nacimiento', 'correo', 'telefono_personal',
+                    'documento_identidad', 'sexo', 'tipo_sangre', 'rol', 'persona_emergencia', 'telefono_emergencia', 'emergencia_relacion', 'emergencia_direccion'
+                ]
+                valores = [persona.get(c) for c in campos] + [persona_id]
+                sql = '''
+                    UPDATE personas SET nombre_completo=%s, fecha_nacimiento=%s, correo=%s, telefono_personal=%s,
+                    documento_identidad=%s, sexo=%s, tipo_sangre=%s, rol=%s, persona_emergencia=%s, telefono_emergencia=%s,
+                    emergencia_relacion=%s, emergencia_direccion=%s WHERE id=%s
+                '''
+                cursor.execute(_apply_placeholder(sql, connection), valores)
+
+            # Update or insert tarjeta if needed
+            if tarjeta:
+                if tarjeta_id:
+                    update_sql = '''
+                        UPDATE tarjetas SET uid=%s, nombre_completo=%s, correo=%s, pin=%s WHERE id=%s
+                    '''
+                    t_vals = [tarjeta.get('uid'), tarjeta.get('nombre_completo'), tarjeta.get('correo'), tarjeta.get('pin'), tarjeta_id]
+                    cursor.execute(_apply_placeholder(update_sql, connection), t_vals)
+                elif tarjeta_uid:
+                    update_sql = '''
+                        UPDATE tarjetas SET uid=%s, nombre_completo=%s, correo=%s, pin=%s WHERE uid=%s
+                    '''
+                    t_vals = [tarjeta.get('uid'), tarjeta.get('nombre_completo'), tarjeta.get('correo'), tarjeta.get('pin'), tarjeta_uid]
+                    cursor.execute(_apply_placeholder(update_sql, connection), t_vals)
+
+            update_fields = []
+            update_values = []
+            if perfil is not None:
+                update_fields.append('perfil_acceso_lab_id = %s')
+                update_values.append(perfil.get('perfil_acceso_lab_id') if isinstance(perfil, dict) else perfil)
+            if estado is not None:
+                try:
+                    estado_int = int(estado)
+                except Exception:
+                    estado_int = 1
+                update_fields.append('estado = %s')
+                update_values.append(estado_int)
+            if tarjeta.get('uid'):
+                update_fields.append('tarjeta_uid = %s')
+                update_values.append(tarjeta.get('uid'))
+
+            if accion is not None:
+                update_fields.append('accion = %s')
+                update_values.append(accion)
+
+            if update_fields:
+                sql = f"UPDATE enrolar SET {', '.join(update_fields)} WHERE id = %s"
+                cursor.execute(_apply_placeholder(sql, connection), update_values + [id])
+
+            connection.commit()
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        return jsonify({'success': True})
+    finally:
+        connection.close()
+
+
+@enrolar_api.route('/api/enrolar/<int:id>', methods=['DELETE'])
+def eliminar_enrolar(id):
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        try:
+            placeholder = _sql_placeholder(connection)
+            cursor.execute(_apply_placeholder('DELETE FROM enrolar WHERE id = %s', connection), (id,))
+            connection.commit()
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        return jsonify({'success': True})
+    finally:
+        connection.close()

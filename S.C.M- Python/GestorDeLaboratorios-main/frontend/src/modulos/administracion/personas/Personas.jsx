@@ -7,7 +7,7 @@ export default function Personas({ onGoHome }) {
   const [view, setView] = useState('list'); // 'list' | 'add' | 'edit'
   const [editId, setEditId] = useState(null);
   const [editPersona, setEditPersona] = useState(null);
-  const [deleteMsg, setDeleteMsg] = useState('');
+  const [statusMsg, setStatusMsg] = useState('');
 
   // Cargar personas
   const fetchPersonas = () => {
@@ -65,16 +65,41 @@ export default function Personas({ onGoHome }) {
       });
       const data = await res.json();
       if (data.success) {
-        setDeleteMsg('Persona eliminada correctamente');
+        setStatusMsg('Persona eliminada correctamente');
         fetchPersonas();
       } else {
-        setDeleteMsg(data.error || 'Error al eliminar');
+        setStatusMsg(data.error || 'Error al eliminar');
       }
     } catch (err) {
-      setDeleteMsg('Error de red');
+      setStatusMsg('Error de red');
     }
-    setTimeout(() => setDeleteMsg(''), 2500);
+    setTimeout(() => setStatusMsg(''), 2500);
   };
+
+  // Actualizar estado de la persona a Activo/Inactivo
+  const handleToggleEstado = async (id, estado) => {
+    try {
+      const res = await fetch(`/api/personas/${id}/estado`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ estado }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStatusMsg(`Estado actualizado a ${estado === 1 ? 'Activo' : 'Inactivo'}`);
+        fetchPersonas();
+      } else {
+        setStatusMsg(data.error || 'Error al actualizar estado');
+      }
+    } catch (err) {
+      console.error('Error updating estado:', err);
+      setStatusMsg('Error de conexión. Verifica tu red e intenta nuevamente.');
+    }
+    setTimeout(() => setStatusMsg(''), 2500);
+  };
+
+  const handleRefresh = () => fetchPersonas();
 
   if (view === 'add') {
     return <RegistrarPersona onSuccess={handleBack} onCancel={handleBack} onGoHome={onGoHome} />;
@@ -122,15 +147,18 @@ export default function Personas({ onGoHome }) {
           <span className="badge bg-info">{personas.length} personas</span>
         </div>
         <div className="card-body p-0">
-          <div className="d-flex justify-content-end p-3">
+          <div className="d-flex justify-content-end gap-2 p-3">
+            <button className="btn btn-outline-secondary" onClick={handleRefresh}>
+              <i className="bi bi-arrow-clockwise me-2"></i> Actualizar
+            </button>
             <button className="btn btn-primary" onClick={handleAdd}>
               <i className="bi bi-person-plus me-2"></i> Nueva Persona
             </button>
           </div>
 
-          {deleteMsg && (
+          {statusMsg && (
             <div className="p-3">
-              <div className="alert alert-info" role="alert">{deleteMsg}</div>
+              <div className="alert alert-info" role="alert">{statusMsg}</div>
             </div>
           )}
 
@@ -143,6 +171,7 @@ export default function Personas({ onGoHome }) {
                   <th>Rol</th>
                   <th>Correo</th>
                   <th>Documento</th>
+                  <th>Estado</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
@@ -156,18 +185,47 @@ export default function Personas({ onGoHome }) {
                       <td>{p.correo}</td>
                       <td><span className="badge bg-secondary">{p.documento_identidad}</span></td>
                       <td>
-                        <button className="btn btn-sm btn-warning me-2" title="Editar" onClick={() => handleEdit(p.id)}>
-                          <i className="bi bi-pencil-square"></i>
-                        </button>
-                        <button className="btn btn-sm btn-danger" title="Eliminar" onClick={() => handleDelete(p.id)}>
-                          <i className="bi bi-trash"></i>
-                        </button>
+                        <span className={`badge ${p.estado == 1 ? 'bg-success' : 'bg-secondary'}`}>
+                          {p.estado == 1 ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="d-flex gap-1 flex-wrap">
+                          <button
+                            type="button"
+                            className={`btn btn-sm flex-fill ${p.estado == 1 ? 'btn-success' : 'btn-outline-success'}`}
+                            onClick={() => handleToggleEstado(p.id, 1)}
+                          >
+                            Activo
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm flex-fill ${p.estado == 0 ? 'btn-danger' : 'btn-outline-danger'}`}
+                            onClick={() => handleToggleEstado(p.id, 0)}
+                          >
+                            Inactivo
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-warning flex-fill"
+                            onClick={() => handleEdit(p.id)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger flex-fill"
+                            onClick={() => handleDelete(p.id)}
+                          >
+                            Eliminar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="text-center text-muted py-4">Sin personas registradas</td>
+                    <td colSpan={7} className="text-center text-muted py-4">Sin personas registradas</td>
                   </tr>
                 )}
               </tbody>

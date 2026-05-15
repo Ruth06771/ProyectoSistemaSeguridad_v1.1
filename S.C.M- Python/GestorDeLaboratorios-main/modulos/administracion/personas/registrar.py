@@ -39,6 +39,19 @@ def registrar_persona():
                 datos["tipo_sangre"], datos["persona_emergencia"], datos["telefono_emergencia"]
             ))
             connection.commit()
+            try:
+                new_id = cursor.lastrowid if hasattr(cursor, 'lastrowid') else None
+                if new_id:
+                    placeholder = '%s'
+                    if connection.__class__.__module__.startswith('sqlite3'):
+                        placeholder = '?'
+                    cursor.execute(
+                        f"INSERT INTO historial_acciones (modulo, entidad_id, entidad_tipo, accion, usuario, descripcion) VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})",
+                        ('personas', new_id, 'persona', 'create', session.get('usuario') if session else None, f'Persona registrada {datos["nombre_completo"]}')
+                    )
+                    connection.commit()
+            except Exception:
+                pass
             connection.close()
             flash("Persona registrada con éxito.", "success")
             return redirect(url_for("registrar_persona"))

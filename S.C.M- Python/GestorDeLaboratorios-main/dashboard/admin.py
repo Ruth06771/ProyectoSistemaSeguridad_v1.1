@@ -5,7 +5,7 @@ app.secret_key = "TU_SECRETO_AQUI"  # cambia por un secreto seguro
 
 @app.route("/admin")
 def admin_dashboard():
-    if "usuario" not in session or session.get("rol") != "admin":
+    if "usuario" not in session or session.get("rol") != "administrador":
         return redirect(url_for("login", error="Acceso no autorizado"))
     return render_template("dashboard_admin.html", usuario=session["usuario"])
 

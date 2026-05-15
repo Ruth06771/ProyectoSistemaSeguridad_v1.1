@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 
 export default function ReportesIngresos({ onFiltrar, resultados = [], filtros = {}, onExportExcel, onExportPDF, onVolver }) {
   const [form, setForm] = useState(filtros);
+  const [tarjetasRegistradas, setTarjetasRegistradas] = useState([]);
+  const [tarjetasByUid, setTarjetasByUid] = useState({});
 
   const handleChange = e => {
     const { name, value } = e.target;
@@ -15,25 +17,43 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
 
   const handleExportPDF = () => {
     const params = new URLSearchParams(form).toString();
-    // Este componente muestra el historial de ingresos de personas,
-    // por lo que debe usar el endpoint de accesos personales.
-    window.open(`/reporte_accesos_personal?${params}`, '_blank');
+    window.open(`/reporte_tarjetas?${params}`, '_blank');
   };
 
   useEffect(() => {
     if (onFiltrar) onFiltrar(filtros || {});
+
+    const fetchTarjetasRegistradas = async () => {
+      try {
+        const response = await fetch('/api/tarjetas', { credentials: 'include' });
+        const data = await response.json();
+        const lista = Array.isArray(data) ? data : (data && data.value ? data.value : []);
+        setTarjetasRegistradas(lista);
+        const byUid = lista.reduce((acc, tarjeta) => {
+          const uid = tarjeta.uid || tarjeta.codigo || tarjeta.tarjeta_uid;
+          if (uid) acc[uid] = tarjeta;
+          return acc;
+        }, {});
+        setTarjetasByUid(byUid);
+      } catch (err) {
+        setTarjetasRegistradas([]);
+        setTarjetasByUid({});
+      }
+    };
+
+    fetchTarjetasRegistradas();
   }, []);
 
   return (
     <div className="container mt-4">
-      <h2>📇 Historial de Ingresos de Personas</h2>
+      <h2>📇 Historial de Registro de Tarjetas</h2>
       <div className="text-start mb-3">
         <button
           className="btn btn-outline-secondary"
           onClick={onVolver}
           title="Regresar al panel de informes"
         >
-          <span className="me-1">←</span> Volver al Módulo de Informes
+          <span className="me-1">←</span> Volver al Módulo de Reportes
         </button>
       </div>
 
@@ -71,6 +91,8 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
             <option value="">-- Todas --</option>
             <option value="alta">Alta</option>
             <option value="baja">Baja</option>
+            <option value="editada">Editada</option>
+            <option value="eliminada">Eliminada</option>
           </select>
         </div>
 
@@ -108,7 +130,7 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
               if (onFiltrar) onFiltrar({});
             }}
           >
-            🔄 Limpiar
+            🔃 Refresh
           </button>
           <button type="button" className="btn btn-success" onClick={onExportExcel}>
             📥 Exportar a Excel
@@ -122,26 +144,30 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
       <table className="table table-striped table-bordered table-hover">
         <thead className="table-dark">
           <tr>
-            <th>Identificación</th>
-            <th>Tarjeta UID</th>
-            <th>Nombre del Usuario</th>
-            <th>Método</th>
+            <th>ID</th>
+            <th>UID Tarjeta</th>
+            <th>Persona Asignada</th>
+            <th>Acción</th>
             <th>Responsable</th>
             <th>Fecha y Hora</th>
           </tr>
         </thead>
         <tbody>
           {resultados.length > 0 ? (
-            resultados.map((row, i) => (
-              <tr key={i}>
-                <td>{row.id}</td>
-                <td>{row.uid_tarjeta}</td>
-                <td>{row.nombre_usuario}</td>
-                <td>{row.accion}</td>
-                <td>{row.responsable}</td>
-                <td>{row.fecha_hora}</td>
-              </tr>
-            ))
+            resultados.map((row, i) => {
+              const uid = row.uid_tarjeta || row.uid || row.tarjeta || '';
+              const tarjetaRegistrada = tarjetasByUid[uid] || {};
+              return (
+                <tr key={i}>
+                  <td>{row.id}</td>
+                  <td>{uid || '-'}</td>
+                  <td>{row.nombre_usuario || row.nombre_completo || tarjetaRegistrada.nombre_completo || tarjetaRegistrada.nombre || '-'}</td>
+                  <td>{row.accion === 'alta' ? 'Alta' : row.accion === 'baja' ? 'Baja' : row.accion === 'editada' || row.accion === 'edicion' ? 'Editada' : row.accion === 'eliminada' ? 'Eliminada' : row.accion || '-'}</td>
+                  <td>{row.responsable || row.ejecutado_por || tarjetaRegistrada.ejecutado_por || '-'}</td>
+                  <td>{row.fecha_hora || '-'}</td>
+                </tr>
+              );
+            })
           ) : (
             <tr>
               <td colSpan={6} className="text-center">

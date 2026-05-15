@@ -2,22 +2,30 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Reporte de Historial de Accesos</title>
+    <title>Historial de Accesos</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         /* Estilos locales para el logo en los reportes */
         .report-logo {
             display: inline-block;
             max-width: 160px; /* default, can be overridden via inline style from Jinja */
-            border-radius: 6px; /* menos redondeo */
-            /* sin sombra para un estilo más plano */
+            border-radius: 6px;
             box-shadow: none;
-            /* fondo transparente para integrarse con el layout */
             background: transparent;
-            padding: 2px 4px; /* menos padding para que el borde sea más sutil */
+            padding: 2px 4px;
             vertical-align: middle;
         }
         .report-logo.hidden { display: none !important; }
+
+        .filter-toggle button.active {
+            background-color: #0d6efd;
+            color: #fff;
+            border-color: #0d6efd;
+        }
+
+        .filter-toggle button {
+            min-width: 120px;
+        }
 
     /* Helper sizes (optional) */
     .report-logo--small { max-width: 80px; }
@@ -29,14 +37,13 @@
 <div class="container mt-4">
 
     <div class="{% if logo_align=='left' %}text-start{% elif logo_align=='right' %}text-end{% else %}text-center{% endif %} mb-3">
-    <!-- Use CSS classes for sizing and Bootstrap utilities for border to avoid inline Jinja inside <style> blocks -->
     <img src="{{ url_for('serve_logo') }}"
              alt="Logo Universidad Evangélica Boliviana"
              title="Universidad Evangélica Boliviana"
              class="report-logo border border-primary p-1 {% if logo_size=='small' %}report-logo--small{% elif logo_size=='large' %}report-logo--large{% elif logo_size=='medium' %}report-logo--medium{% endif %}"
              onerror="this.classList.add('hidden'); this.alt='';">
     </div>
-    <h2 class="text-center">Reporte de Historial de Accesos</h2>
+    <h2 class="text-center">Historial de Accesos</h2>
 
     <div class="text-start mb-3">
         <a href="{{ url_for('tarjetas_historial') }}" class="btn btn-outline-secondary">
@@ -44,7 +51,13 @@
         </a>
     </div>
 
-    <form method="GET" class="row g-3 mb-4">
+    <div class="filter-toggle mb-3 d-flex flex-wrap gap-2">
+        <button type="button" id="btn-movimiento" class="btn btn-outline-primary">Movimiento</button>
+        <button type="button" id="btn-resultado" class="btn btn-outline-primary">Resultado</button>
+        <button type="button" id="btn-credencial" class="btn btn-outline-primary">Credencial</button>
+    </div>
+
+    <form method="GET" class="row g-3 mb-4" id="accesos-filtros-form">
         <div class="col-md-3">
             <label for="fecha_desde" class="form-label">Fecha Desde</label>
             <input type="date" class="form-control" id="fecha_desde" name="fecha_desde" value="{{ fecha_desde }}">
@@ -54,27 +67,42 @@
             <input type="date" class="form-control" id="fecha_hasta" name="fecha_hasta" value="{{ fecha_hasta }}">
         </div>
         <div class="col-md-2">
-            <label for="tipo_accion" class="form-label">Tipo de Acción</label>
-            {% set acciones = [('', '-- Todos --'), ('alta', 'Alta'), ('baja', 'Baja'), ('acceso permitido', 'Acceso Permitido'), ('acceso denegado', 'Acceso Denegado')] %}
-            <select class="form-select" id="tipo_accion" name="tipo_accion">
-                {% for val, label in acciones %}
-                <option value="{{ val }}" selected="{{ 'selected' if (tipo_accion == val) else '' }}">{{ label }}</option>
-                {% endfor %}
+            <label for="tipo_movimiento" class="form-label">Movimiento</label>
+            <select class="form-select" id="tipo_movimiento" name="tipo_movimiento">
+                <option value="" {% if tipo_movimiento=='' %}selected{% endif %}>-- Todos --</option>
+                <option value="Entrada" {% if tipo_movimiento=='Entrada' %}selected{% endif %}>Entrada</option>
+                <option value="Salida" {% if tipo_movimiento=='Salida' %}selected{% endif %}>Salida</option>
             </select>
         </div>
         <div class="col-md-2">
-            <label for="usuario_responsable" class="form-label">Usuario Responsable</label>
-            <input type="text" class="form-control" id="usuario_responsable" name="usuario_responsable" value="{{ usuario_responsable }}" placeholder="Nombre o usuario">
+            <label for="resultado" class="form-label">Resultado</label>
+            <select class="form-select" id="resultado" name="resultado">
+                <option value="" {% if resultado=='' %}selected{% endif %}>-- Todos --</option>
+                <option value="Permitido" {% if resultado=='Permitido' %}selected{% endif %}>Permitido</option>
+                <option value="Denegado" {% if resultado=='Denegado' %}selected{% endif %}>Denegado</option>
+            </select>
         </div>
         <div class="col-md-2">
-            <label for="tarjeta" class="form-label">Tarjeta RFID</label>
-            <input type="text" class="form-control" id="tarjeta" name="tarjeta" value="{{ tarjeta }}" placeholder="ID o código">
+            <label for="credencial" class="form-label">Credencial</label>
+            <select class="form-select" id="credencial" name="credencial">
+                <option value="" {% if credencial=='' %}selected{% endif %}>-- Todas --</option>
+                <option value="Tarjeta" {% if credencial=='Tarjeta' %}selected{% endif %}>Tarjeta</option>
+                <option value="PIN" {% if credencial=='PIN' %}selected{% endif %}>PIN</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label for="persona" class="form-label">Persona</label>
+            <input type="text" class="form-control" id="persona" name="nombre_completo" value="{{ nombre_completo }}" placeholder="Nombre completo">
+        </div>
+        <div class="col-md-2">
+            <label for="tarjeta" class="form-label">UID Tarjeta</label>
+            <input type="text" class="form-control" id="tarjeta" name="uid_tarjeta" value="{{ tarjeta }}" placeholder="UID tarjeta">
         </div>
         <div class="col-12 d-flex gap-2">
             <button class="btn btn-primary">🔍 Filtrar</button>
-            <a href="{{ url_for('tarjetas_historial') }}" class="btn btn-secondary">🔄 Limpiar</a>
-            <a href="#" class="btn btn-success">📥 Exportar a Excel</a>
-            <a href="#" class="btn btn-danger">📄 Exportar a PDF</a>
+            <a href="{{ url_for('accesos_historial') }}" class="btn btn-secondary">🔄 Limpiar</a>
+            <a href="/exportar_excel_accesos?{{ request.query_string.decode('utf-8') }}" class="btn btn-success">📥 Exportar a Excel</a>
+            <a href="/reporte_accesos_personal?{{ request.query_string.decode('utf-8') }}" class="btn btn-danger">📄 Exportar a PDF</a>
         </div>
     </form>
 
@@ -83,9 +111,11 @@
             <tr>
                 <th>ID</th>
                 <th>Fecha y Hora</th>
-                <th>Acción</th>
-                <th>Usuario Responsable</th>
-                <th>Tarjeta RFID</th>
+                <th>Persona</th>
+                <th>Movimiento</th>
+                <th>Resultado</th>
+                <th>Credencial</th>
+                <th>UID Tarjeta</th>
                 <th>Descripción</th>
             </tr>
         </thead>
@@ -94,17 +124,70 @@
             <tr>
                 <td>{{ row.id }}</td>
                 <td>{{ row.fecha_hora }}</td>
-                <td>{{ row.accion }}</td>
-                <td>{{ row.usuario_responsable }}</td>
-                <td>{{ row.tarjeta }}</td>
-                <td>{{ row.descripcion }}</td>
+                <td>{{ row.persona or 'Desconocido' }}</td>
+                <td>{{ row.movimiento or '-' }}</td>
+                <td>{{ row.resultado or '-' }}</td>
+                <td>{{ row.credencial or '-' }}</td>
+                <td>{{ row.uid_tarjeta or '-' }}</td>
+                <td>{{ row.descripcion or '-' }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="6" class="text-center">No hay resultados</td></tr>
+            <tr><td colspan="8" class="text-center">No hay resultados</td></tr>
             {% endfor %}
         </tbody>
     </table>
 
 </div>
+
+<script>
+    const movimientoSelect = document.getElementById('tipo_movimiento');
+    const resultadoSelect = document.getElementById('resultado');
+    const credencialSelect = document.getElementById('credencial');
+    const buttons = {
+        tipo_movimiento: document.getElementById('btn-movimiento'),
+        resultado: document.getElementById('btn-resultado'),
+        credencial: document.getElementById('btn-credencial'),
+    };
+
+    const setActiveButton = name => {
+        Object.keys(buttons).forEach(key => {
+            buttons[key].classList.toggle('active', key === name);
+        });
+    };
+
+    const clearOtherSelects = selectedName => {
+        if (selectedName === 'tipo_movimiento') {
+            resultadoSelect.value = '';
+            credencialSelect.value = '';
+        }
+        if (selectedName === 'resultado') {
+            movimientoSelect.value = '';
+            credencialSelect.value = '';
+        }
+        if (selectedName === 'credencial') {
+            movimientoSelect.value = '';
+            resultadoSelect.value = '';
+        }
+    };
+
+    const selectFilterType = type => {
+        setActiveButton(type);
+        clearOtherSelects(type);
+    };
+
+    movimientoSelect.addEventListener('change', () => selectFilterType('tipo_movimiento'));
+    resultadoSelect.addEventListener('change', () => selectFilterType('resultado'));
+    credencialSelect.addEventListener('change', () => selectFilterType('credencial'));
+
+    buttons.tipo_movimiento.addEventListener('click', () => selectFilterType('tipo_movimiento'));
+    buttons.resultado.addEventListener('click', () => selectFilterType('resultado'));
+    buttons.credencial.addEventListener('click', () => selectFilterType('credencial'));
+
+    window.addEventListener('DOMContentLoaded', () => {
+        if (movimientoSelect.value) setActiveButton('tipo_movimiento');
+        else if (resultadoSelect.value) setActiveButton('resultado');
+        else if (credencialSelect.value) setActiveButton('credencial');
+    });
+</script>
 </body>
 </html>

@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Inspect DB and insert sample tarjetas",
+			"type": "shell",
+			"command": "python tmp_inspect_db.py",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

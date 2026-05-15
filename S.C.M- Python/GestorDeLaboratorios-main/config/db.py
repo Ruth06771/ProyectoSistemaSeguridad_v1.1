@@ -57,7 +57,7 @@ def _ensure_sqlite_schema(conn):
         sexo TEXT,
         tipo_sangre INTEGER,
         rol TEXT,
-        estado INTEGER DEFAULT 1,
+        estado INTEGER DEFAULT 1, 
         persona_emergencia INTEGER,
         telefono_emergencia TEXT,
         FOREIGN KEY(tipo_sangre) REFERENCES tipo_sangre(id),
@@ -197,11 +197,24 @@ def _ensure_sqlite_schema(conn):
     except Exception:
         pass
 
+    # Ensure enrolar table has 'accion' column (for action tracking)
+    try:
+        cur.execute("PRAGMA table_info(enrolar)")
+        cols = [r['name'] for r in cur.fetchall()]
+        if 'accion' not in cols:
+            try:
+                cur.execute('ALTER TABLE enrolar ADD COLUMN accion TEXT DEFAULT "activo"')
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     # tipos de movimiento
     cur.execute('''
     CREATE TABLE IF NOT EXISTS tipo_movimiento (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL UNIQUE,
+        movimiento TEXT NOT NULL UNIQUE,
+        descripcion TEXT NOT NULL,
         estado INTEGER DEFAULT 1
     )
     ''')
@@ -211,8 +224,8 @@ def _ensure_sqlite_schema(conn):
         cur.execute("SELECT COUNT(*) FROM tipo_movimiento")
         count = cur.fetchone()[0]
         if count == 0:
-            cur.execute("INSERT INTO tipo_movimiento (nombre, estado) VALUES (?, ?)", ('Entrada', 1))
-            cur.execute("INSERT INTO tipo_movimiento (nombre, estado) VALUES (?, ?)", ('Salida', 1))
+            cur.execute("INSERT INTO tipo_movimiento (movimiento, descripcion, estado) VALUES (?, ?, ?)", ('entrada', 'Registro entrada', 1))
+            cur.execute("INSERT INTO tipo_movimiento (movimiento, descripcion, estado) VALUES (?, ?, ?)", ('salida', 'Registro de salida', 1))
             conn.commit()
     except Exception:
         # If insert fails (e.g., duplicates exist), continue
@@ -226,21 +239,70 @@ def _ensure_sqlite_schema(conn):
     )
     ''')
 
+    # tipos de registro
+    cur.execute('''
+    CREATE TABLE IF NOT EXISTS tipo_registro (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL UNIQUE,
+        perfil_fk INTEGER,
+        estado INTEGER DEFAULT 1,
+        FOREIGN KEY(perfil_fk) REFERENCES perfil_acceso_lab(id)
+    )
+    ''')
+
+    # Seed default registro types if empty
+    try:
+        cur.execute("SELECT COUNT(*) FROM tipo_registro")
+        count = cur.fetchone()[0]
+        if count == 0:
+            cur.execute("INSERT INTO tipo_registro (id, nombre, perfil_fk, estado) VALUES (?, ?, ?, ?)", (1, 'pin', 1, 1))
+            cur.execute("INSERT INTO tipo_registro (id, nombre, perfil_fk, estado) VALUES (?, ?, ?, ?)", (2, 'tarjeta', 1, 1))
+            conn.commit()
+    except Exception:
+        # If insert fails (e.g., duplicates exist), continue
+        pass
+
     # registro de accesos
     cur.execute('''
     CREATE TABLE IF NOT EXISTS registro_acceso (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        enrolar_id INTEGER,
         tarjeta_uid TEXT,
         codigo_ingreso TEXT,
         fecha_hora TEXT DEFAULT CURRENT_TIMESTAMP,
         tipo_movimiento_id INTEGER,
         tipo_dispositivo_id INTEGER,
+        resultado TEXT,
+        credencial TEXT,
         descripcion TEXT,
         estado INTEGER DEFAULT 1,
+        FOREIGN KEY(enrolar_id) REFERENCES enrolar(id),
         FOREIGN KEY(tipo_movimiento_id) REFERENCES tipo_movimiento(id),
         FOREIGN KEY(tipo_dispositivo_id) REFERENCES tipo_dispositivo(id)
     )
     ''')
+
+    # Ensure registro_acceso has resultado and credencial columns (for existing DBs)
+    try:
+        cur.execute("PRAGMA table_info(registro_acceso)")
+        cols = [r['name'] for r in cur.fetchall()]
+        if 'resultado' not in cols:
+            try:
+                cur.execute('ALTER TABLE registro_acceso ADD COLUMN resultado TEXT')
+            except Exception:
+                pass
+        if 'credencial' not in cols:
+            try:
+                cur.execute('ALTER TABLE registro_acceso ADD COLUMN credencial TEXT')
+            except Exception:
+                pass
+        if 'enrolar_id' not in cols:
+            try:
+                cur.execute('ALTER TABLE registro_acceso ADD COLUMN enrolar_id INTEGER')
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     # dispositivos (ESP32)
     cur.execute('''
@@ -263,9 +325,29 @@ def _ensure_sqlite_schema(conn):
         accion TEXT,
         usuario TEXT,
         descripcion TEXT,
+        documento_identidad TEXT,
         fecha_hora TEXT DEFAULT CURRENT_TIMESTAMP
     )
     ''')
+
+    try:
+        cur.execute('ALTER TABLE historial_acciones ADD COLUMN documento_identidad TEXT')
+    except Exception:
+        pass
+
+    try:
+        cur.execute('''
+            UPDATE historial_acciones
+            SET documento_identidad = (
+                SELECT p.documento_identidad
+                FROM personas p
+                WHERE p.id = historial_acciones.entidad_id
+            )
+            WHERE entidad_tipo = 'persona' AND documento_identidad IS NULL
+        ''')
+        conn.commit()
+    except Exception:
+        pass
 
     cur.execute('''
     CREATE TABLE IF NOT EXISTS historial_tarjetas (
@@ -295,12 +377,39 @@ def _ensure_sqlite_schema(conn):
 
 
 def log_action(connection, modulo, entidad_id=None, entidad_tipo=None,
-               accion=None, usuario=None, descripcion=None):
+               accion=None, usuario=None, descripcion=None, documento_identidad=None):
     """Inserta una fila de auditoría en `historial_acciones`."""
+    if documento_identidad is None and entidad_tipo == 'persona' and entidad_id is not None:
+        inner_cursor = connection.cursor()
+        try:
+            placeholder = '%s'
+            if connection.__class__.__module__.startswith('sqlite3'):
+                placeholder = '?'
+            inner_cursor.execute(f"SELECT documento_identidad FROM personas WHERE id = {placeholder}", (entidad_id,))
+            row = inner_cursor.fetchone()
+            if row:
+                documento_identidad = row[0] if isinstance(row, (list, tuple)) else (row.get('documento_identidad') if hasattr(row, 'get') else None)
+        except Exception:
+            pass
+        finally:
+            try:
+                inner_cursor.close()
+            except Exception:
+                pass
+
     sql = '''
     INSERT INTO historial_acciones
-    (modulo, entidad_id, entidad_tipo, accion, usuario, descripcion)
-    VALUES (?, ?, ?, ?, ?, ?)
+    (modulo, entidad_id, entidad_tipo, accion, usuario, descripcion, documento_identidad)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
     '''
-    connection.execute(sql, (modulo, entidad_id, entidad_tipo, accion, usuario, descripcion))
-    connection.commit()
+    if connection.__class__.__module__.startswith('sqlite3'):
+        sql = sql.replace('%s', '?')
+    cursor = connection.cursor()
+    try:
+        cursor.execute(sql, (modulo, entidad_id, entidad_tipo, accion, usuario, descripcion, documento_identidad))
+        connection.commit()
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass

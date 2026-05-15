@@ -14,27 +14,61 @@ def exportar_excel_tarjetas():
     usuario = request.args.get('usuario', '')
     tarjeta = request.args.get('tarjeta', '')
 
-    # Construir consulta dinámica
-    query = "SELECT * FROM historial_tarjetas WHERE 1=1"
+    # Construir consulta dinámica y unir datos de tarjeta/enrolamiento
+    query = """
+    SELECT
+        ht.id,
+        COALESCE(ht.nombre_completo, '') AS nombre_completo,
+        ht.uid AS uid_tarjeta,
+        t.pin AS pin,
+        COALESCE(
+            (SELECT pa.nombre
+             FROM perfil_acceso_lab pa
+             WHERE pa.id = (
+                 SELECT e.perfil_acceso_lab_id
+                 FROM enrolar e
+                 WHERE (e.tarjeta_id = ht.tarjeta_id OR e.tarjeta_uid = ht.uid)
+                   AND e.perfil_acceso_lab_id IS NOT NULL
+                 ORDER BY e.fecha_de_registro DESC
+                 LIMIT 1
+             )
+            ),
+            ''
+        ) AS perfil,
+        COALESCE(
+            (SELECT e.estado
+             FROM enrolar e
+             WHERE (e.tarjeta_id = ht.tarjeta_id OR e.tarjeta_uid = ht.uid)
+             ORDER BY e.fecha_de_registro DESC
+             LIMIT 1
+            ),
+            t.estado
+        ) AS estado,
+        ht.ejecutado_por AS responsable,
+        ht.fecha_hora
+    FROM historial_tarjetas ht
+    LEFT JOIN tarjetas t ON t.id = ht.tarjeta_id OR t.uid = ht.uid
+    WHERE 1=1
+    """
     params = []
 
     if fecha_desde:
-        query += " AND ejecutado_en >= %s"
+        query += " AND ht.fecha_hora >= %s"
         params.append(fecha_desde + " 00:00:00")
     if fecha_hasta:
-        query += " AND ejecutado_en <= %s"
+        query += " AND ht.fecha_hora <= %s"
         params.append(fecha_hasta + " 23:59:59")
     if accion:
-        query += " AND accion = %s"
+        query += " AND ht.accion = %s"
         params.append(accion)
     if usuario:
-        query += " AND ejecutado_por LIKE %s"
+        query += " AND ht.ejecutado_por LIKE %s"
         params.append(f"%{usuario}%")
     if tarjeta:
-        query += " AND UID LIKE %s"
+        query += " AND ht.uid LIKE %s"
         params.append(f"%{tarjeta}%")
 
-    query += " ORDER BY ejecutado_en DESC"
+    query += " ORDER BY ht.fecha_hora DESC"
 
     # Conectar a la base de datos
     connection = get_connection()
@@ -62,18 +96,20 @@ def exportar_excel_tarjetas():
     ws.title = "Historial Tarjetas"
 
     # Encabezados
-    headers = ['ID', 'UID Tarjeta', 'Nombre Completo', 'Acción', 'Ejecutado Por', 'Fecha y Hora']
+    headers = ['ID', 'Nombre de la Persona', 'Tarjeta', 'PIN', 'Perfil', 'Fecha y Hora', 'Responsable', 'Estado']
     ws.append(headers)
 
     # Rellenar filas
     for row in registros:
         ws.append([
-            row['id'],
-            row['uid'],
-            row['nombre_completo'],
-            row['accion'],
-            row['ejecutado_por'],
-            row['ejecutado_en']
+            row.get('id'),
+            row.get('nombre_completo'),
+            row.get('uid_tarjeta') or row.get('uid'),
+            row.get('pin'),
+            row.get('perfil'),
+            row.get('fecha_hora'),
+            row.get('responsable'),
+            row.get('estado')
         ])
 
     # Autoajustar ancho de columnas

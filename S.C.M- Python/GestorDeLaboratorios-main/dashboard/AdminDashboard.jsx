@@ -27,7 +27,7 @@ export default function AdminDashboard({ usuario, onLogout }) {
             📊 Reporte de Historial de Accesos
           </button>
           <button onClick={() => setView('tarjetas_historial')} className="list-group-item list-group-item-action">
-            💳 Reporte de Historial de Tarjetas
+            💳 Historial de acciones en personas
           </button>
           <button onClick={onLogout} className="list-group-item list-group-item-action text-danger">
             🚪 Cerrar Sesión

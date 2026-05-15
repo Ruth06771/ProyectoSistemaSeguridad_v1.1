@@ -78,6 +78,14 @@ except Exception:
     import traceback
     traceback.print_exc()
 
+# Optional Excel export endpoints for reportes
+try:
+    from modulos.reportes.exportar_excel import bp as exportar_excel_bp
+    app.register_blueprint(exportar_excel_bp)
+except Exception:
+    import traceback
+    traceback.print_exc()
+
 # Optional tarjeta historial PDF report (weasyprint)
 try:
     from modulos.reportes.exportar_pdf_tarjeta_historial_accesos import bp as exportar_pdf_tarjeta_historial_bp
@@ -131,6 +139,13 @@ except Exception:
     import traceback
     traceback.print_exc()
 
+try:
+    from modulos.registro.tipo_registro_api import tipo_registro_api
+    app.register_blueprint(tipo_registro_api)
+except Exception:
+    import traceback
+    traceback.print_exc()
+
 # Register ESP device API
 try:
     from auth.esp_api import esp_api
@@ -140,8 +155,8 @@ except Exception:
     traceback.print_exc()
 
 usuarios = {
-    "admin@uni.edu": {"password": "1234", "rol": "admin"},
-    "user@uni.edu": {"password": "abcd", "rol": "user"}
+    "admin@uni.edu": {"password": "1234", "rol": "administrador"},
+    "user@uni.edu": {"password": "abcd", "rol": "estudiante"}
 }
 
 # Admin seeding & limits

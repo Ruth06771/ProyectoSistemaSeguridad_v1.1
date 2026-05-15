@@ -66,10 +66,11 @@ export default function Usuarios({ onGoHome }) {
                       <td className="text-capitalize">{u.rol || 'estudiante'}</td>
                       <td>
                         <select className="form-select form-select-sm d-inline-block w-auto me-2" defaultValue={u.rol || 'estudiante'} onChange={(e) => changeRole(u.id, e.target.value)}>
-                          <option value="estudiante">Estudiante</option>
+                          <option value="administrador">Administrador</option>
                           <option value="docente">Docente</option>
+                          <option value="estudiante">Estudiante</option>
                           <option value="auxiliar">Auxiliar</option>
-                          <option value="admin">Administrador</option>
+                          <option value="invitado">Invitado</option>
                         </select>
                       </td>
                     </tr>

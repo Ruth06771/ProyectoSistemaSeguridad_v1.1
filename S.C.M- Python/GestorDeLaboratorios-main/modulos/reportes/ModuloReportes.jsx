@@ -11,7 +11,7 @@ export default function ModuloReportes({ onVolver }) {
       </div>
       <div className="list-group">
         <a href="/modulos/reportes/accesos_historial" className="list-group-item list-group-item-action">
-          🔐 Reporte de Historial de Accesos
+          🔐 Historial de Accesos
         </a>
         <a href="/modulos/reportes/tarjetas_historial" className="list-group-item list-group-item-action">
           💳 Reporte de Altas y Bajas de Tarjetas RFID

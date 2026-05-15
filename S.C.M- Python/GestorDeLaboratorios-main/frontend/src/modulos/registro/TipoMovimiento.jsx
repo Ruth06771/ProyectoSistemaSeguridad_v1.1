@@ -4,7 +4,7 @@ export default function TipoMovimiento({ onGoHome }) {
   const [movimientos, setMovimientos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [editNombre, setEditNombre] = useState('');
+  const [editMovimiento, setEditMovimiento] = useState('');
   const [msg, setMsg] = useState('');
 
   const fetchMovimientos = () => {
@@ -22,18 +22,18 @@ export default function TipoMovimiento({ onGoHome }) {
 
   const handleEdit = (mov) => {
     setEditId(mov.id);
-    setEditNombre(mov.nombre);
+    setEditMovimiento(mov.movimiento);
   };
 
   const saveEdit = async () => {
-    if (!editNombre || editNombre.trim() === '') { setMsg('El nombre es obligatorio'); return; }
+    if (!editMovimiento || !['entrada', 'salida'].includes(editMovimiento.toLowerCase())) { setMsg('Movimiento debe ser "entrada" o "salida"'); return; }
     setMsg('Guardando...');
     try {
       const mov = movimientos.find(m => m.id === editId);
       const res = await fetch(`/api/tipo_movimiento/${editId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre: editNombre, estado: mov.estado }),
+        body: JSON.stringify({ movimiento: editMovimiento.toLowerCase(), estado: mov.estado }),
         credentials: 'include'
       });
       const j = await res.json();
@@ -41,7 +41,7 @@ export default function TipoMovimiento({ onGoHome }) {
         setMsg('✓ Actualizado');
         fetchMovimientos();
         setEditId(null);
-        setEditNombre('');
+        setEditMovimiento('');
         setTimeout(() => setMsg(''), 2000);
       } else {
         setMsg(j.error || 'Error al guardar');
@@ -55,7 +55,7 @@ export default function TipoMovimiento({ onGoHome }) {
       const res = await fetch(`/api/tipo_movimiento/${mov.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre: mov.nombre, estado: nuevoEstado }),
+        body: JSON.stringify({ movimiento: mov.movimiento, estado: nuevoEstado }),
         credentials: 'include'
       });
       if (res.ok) {
@@ -103,7 +103,8 @@ export default function TipoMovimiento({ onGoHome }) {
                 <thead className="table-light">
                   <tr>
                     <th style={{ width: '50px' }}>ID</th>
-                    <th>Nombre</th>
+                    <th>Movimiento</th>
+                    <th>Descripción</th>
                     <th style={{ width: '120px' }}>Estado</th>
                     <th style={{ width: '150px' }}>Acciones</th>
                   </tr>
@@ -114,17 +115,20 @@ export default function TipoMovimiento({ onGoHome }) {
                       <td className="text-muted"><small>#{mov.id}</small></td>
                       <td>
                         {editId === mov.id ? (
-                          <input
-                            type="text"
+                          <select
                             className="form-control form-control-sm"
-                            value={editNombre}
-                            onChange={e => setEditNombre(e.target.value)}
+                            value={editMovimiento}
+                            onChange={e => setEditMovimiento(e.target.value)}
                             autoFocus
-                          />
+                          >
+                            <option value="entrada">Entrada</option>
+                            <option value="salida">Salida</option>
+                          </select>
                         ) : (
-                          mov.nombre
+                          mov.movimiento.charAt(0).toUpperCase() + mov.movimiento.slice(1)
                         )}
                       </td>
+                      <td>{mov.descripcion}</td>
                       <td><span className={`badge ${getEstadoBadgeClass(mov.estado)}`}>{getEstadoText(mov.estado)}</span></td>
                       <td>
                         {editId === mov.id ? (
@@ -138,7 +142,7 @@ export default function TipoMovimiento({ onGoHome }) {
                             </button>
                             <button
                               className="btn btn-sm btn-outline-secondary"
-                              onClick={() => { setEditId(null); setEditNombre(''); }}
+                              onClick={() => { setEditId(null); setEditMovimiento(''); }}
                               title="Cancelar"
                             >
                               <i className="bi bi-x"></i>

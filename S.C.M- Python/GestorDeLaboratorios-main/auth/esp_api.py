@@ -146,15 +146,21 @@ def esp_access():
         # Check if tarjeta is already linked to a persona via enrolar table
         persona_info = None
         perfil_info = None
+        enrolar_id = None
         try:
             if is_sqlite:
-                cur.execute('SELECT persona_id FROM enrolar WHERE tarjeta_uid = ? LIMIT 1', (uid,))
+                cur.execute('SELECT id, persona_id FROM enrolar WHERE tarjeta_uid = ? LIMIT 1', (uid,))
                 er = cur.fetchone()
             else:
-                cur.execute('SELECT persona_id FROM enrolar WHERE tarjeta_uid = %s LIMIT 1', (uid,))
+                cur.execute('SELECT id, persona_id FROM enrolar WHERE tarjeta_uid = %s LIMIT 1', (uid,))
                 er = cur.fetchone()
             if er:
-                pid = er[0] if isinstance(er, (list, tuple)) else (er.get('persona_id') if hasattr(er, 'get') else None)
+                try:
+                    enrolar_id = er['id'] if isinstance(er, dict) else er[0]
+                    pid = er['persona_id'] if isinstance(er, dict) else er[1]
+                except Exception:
+                    enrolar_id = er[0]
+                    pid = er[1]
                 if pid:
                     # fetch persona
                     if is_sqlite:
@@ -184,6 +190,34 @@ def esp_access():
                         except Exception:
                             cols = [c[0] for c in cur.description] if cur.description else []
                             perfil_info = [{cols[i]: p[i] for i in range(min(len(cols), len(p)))} for p in perfiles]
+                    
+                    # Register access in registro_acceso table
+                    resultado = 'Permitido' if persona_info else 'Denegado'
+                    credencial = data.get('credencial', 'Tarjeta')  # 'Tarjeta' o 'PIN'
+                    tipo_movimiento_id = 1  # Default: Entrada (should be fetched from tipo_movimiento)
+                    
+                    # Get tipo_movimiento_id for 'Entrada'
+                    try:
+                        if is_sqlite:
+                            cur.execute('SELECT id FROM tipo_movimiento WHERE nombre = ?', ('Entrada',))
+                        else:
+                            cur.execute('SELECT id FROM tipo_movimiento WHERE nombre = %s', ('Entrada',))
+                        tm_row = cur.fetchone()
+                        if tm_row:
+                            tipo_movimiento_id = tm_row[0] if isinstance(tm_row, (tuple, list)) else tm_row.get('id')
+                    except Exception:
+                        pass
+                    
+                    if is_sqlite:
+                        cur.execute('INSERT INTO registro_acceso (enrolar_id, tarjeta_uid, fecha_hora, tipo_movimiento_id, resultado, credencial, descripcion) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                                    (enrolar_id, uid, ts, tipo_movimiento_id, resultado, credencial, descripcion))
+                    else:
+                        cur.execute('INSERT INTO registro_acceso (enrolar_id, tarjeta_uid, fecha_hora, tipo_movimiento_id, resultado, credencial, descripcion) VALUES (%s, %s, %s, %s, %s, %s, %s)',
+                                    (enrolar_id, uid, ts, tipo_movimiento_id, resultado, credencial, descripcion))
+                    try:
+                        conn.commit()
+                    except Exception:
+                        pass
         except Exception:
             # non-fatal
             traceback.print_exc()
@@ -220,6 +254,11 @@ def esp_access():
                             cur.execute(sql, valores)
                             conn.commit()
                             pid = cur.lastrowid if hasattr(cur, 'lastrowid') else None
+                            if pid:
+                                try:
+                                    log_action(conn, 'personas', entidad_id=pid, entidad_tipo='persona', accion='create', usuario=None, descripcion=f'Persona creada vía ESP32 uid={uid}')
+                                except Exception:
+                                    pass
                         except Exception:
                             try:
                                 conn.rollback()

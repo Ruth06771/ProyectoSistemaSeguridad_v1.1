@@ -106,41 +106,49 @@ export default function TarjetasRegistradas({ onGoHome }) {
   const handleEdit = (id) => { setEditId(id); setView('edit'); };
   const handleBack = () => setView('list');
 
-  // Eliminar tarjeta
-  const handleDelete = async (id) => {
-    if (!window.confirm('¿Seguro que deseas eliminar esta tarjeta?')) return;
-    const res = await fetch(`/api/tarjetas/${id}`, {
-      method: 'DELETE',
-      credentials: 'include'
-    });
-    const data = await res.json();
-    if (data.success) {
-      setDeleteMsg('Tarjeta eliminada correctamente');
-      fetchTarjetas();
-    } else {
-      setDeleteMsg(data.error || 'Error al eliminar');
+  // Registrar acción de tarjeta (Alta, Baja, Eliminada)
+  const handleAccion = async (tarjeta, accion) => {
+    if (accion === 'eliminada') {
+      if (!window.confirm('¿Seguro que deseas eliminar esta tarjeta?')) return;
     }
-    setTimeout(() => setDeleteMsg(''), 2000);
+    
+    // Actualizar estado de forma optimista
+    if (accion === 'alta' || accion === 'baja') {
+      const newEstado = accion === 'alta' ? 1 : 0;
+      setTarjetas(prev => prev.map(t => t.id === tarjeta.id ? { ...t, estado: newEstado } : t));
+    } else if (accion === 'eliminada') {
+      setTarjetas(prev => prev.filter(t => t.id !== tarjeta.id));
+    }
+    
+    try {
+      const res = await fetch(`/api/tarjetas/${tarjeta.id}/accion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ accion })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const mensajes = {
+          'alta': 'Tarjeta dada de Alta',
+          'baja': 'Tarjeta dada de Baja',
+          'eliminada': 'Tarjeta eliminada correctamente'
+        };
+        setDeleteMsg(mensajes[accion] || 'Acción realizada correctamente');
+      } else {
+        setDeleteMsg(data.error || `Error al ejecutar acción ${accion}`);
+        // Si falla, recargar para restaurar el estado anterior
+        fetchTarjetas();
+      }
+    } catch (err) {
+      setDeleteMsg('Error de conexión');
+      // Si falla, recargar para restaurar el estado anterior
+      fetchTarjetas();
+    }
+    setTimeout(() => setDeleteMsg(''), 2500);
   };
 
-  // Toggle estado (cambiar activo/inactivo)
-  const toggleEstado = async (tarjeta) => {
-    const nuevoEstado = tarjeta.estado === 1 ? 0 : 1;
-    const res = await fetch(`/api/tarjetas/${tarjeta.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ ...tarjeta, estado: nuevoEstado })
-    });
-    const data = await res.json();
-    if (data.success) {
-      fetchTarjetas();
-      setDeleteMsg(`Estado actualizado a ${nuevoEstado === 1 ? 'Activo' : 'Inactivo'}`);
-      setTimeout(() => setDeleteMsg(''), 2000);
-    } else {
-      setDeleteMsg(data.error || 'Error al actualizar estado');
-    }
-  };
+  const handleRefresh = () => fetchTarjetas();
 
   const getEstadoText = (estado) => estado === 1 ? 'Activo' : 'Inactivo';
   const getEstadoBadgeClass = (estado) => estado === 1 ? 'bg-success' : 'bg-secondary';
@@ -161,7 +169,10 @@ export default function TarjetasRegistradas({ onGoHome }) {
         </div>
         <div className="card-body p-0">
           {deleteMsg && <div className="alert alert-info m-3">{deleteMsg}</div>}
-          <div className="d-flex justify-content-end p-3">
+          <div className="d-flex justify-content-end gap-2 p-3">
+            <button className="btn btn-outline-secondary" onClick={handleRefresh}>
+              <i className="bi bi-arrow-clockwise me-2"></i> Actualizar
+            </button>
             <button className="btn btn-primary" onClick={handleAdd}>
               <i className="bi bi-plus-circle me-2"></i> Nueva Tarjeta
             </button>
@@ -184,21 +195,38 @@ export default function TarjetasRegistradas({ onGoHome }) {
                     <tr key={i}>
                       <td className="text-muted"><small>#{fila.id}</small></td>
                       <td><code style={{ fontSize: '12px', background: '#f8f9fa', padding: '4px 8px', borderRadius: '4px' }}>{fila.uid}</code></td>
-                      <td><span className={`badge ${getEstadoBadgeClass(fila.estado)}`}>{getEstadoText(fila.estado)}</span></td>
                       <td>
-                        <button
-                          className="btn btn-sm btn-outline-info me-2"
-                          title={fila.estado === 1 ? "Desactivar" : "Activar"}
-                          onClick={() => toggleEstado(fila)}
-                        >
-                          <i className={`bi ${fila.estado === 1 ? 'bi-toggle-on' : 'bi-toggle-off'}`}></i>
-                        </button>
-                        <button className="btn btn-sm btn-warning me-2" title="Editar" onClick={() => handleEdit(fila.id)}>
-                          <i className="bi bi-pencil-square"></i>
-                        </button>
-                        <button className="btn btn-sm btn-danger" title="Eliminar" onClick={() => handleDelete(fila.id)}>
-                          <i className="bi bi-trash"></i>
-                        </button>
+                        <span className={`badge ${getEstadoBadgeClass(fila.estado)}`}>
+                          {getEstadoText(fila.estado)}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="d-flex gap-1 flex-wrap">
+                          <button
+                            type="button"
+                            className={`btn btn-sm flex-fill ${fila.estado === 1 ? 'btn-success' : 'btn-outline-success'}`}
+                            onClick={() => handleAccion(fila, 'alta')}
+                            title="Marcar como Alta"
+                          >
+                            Alta
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm flex-fill ${fila.estado === 0 ? 'btn-danger' : 'btn-outline-danger'}`}
+                            onClick={() => handleAccion(fila, 'baja')}
+                            title="Marcar como Baja"
+                          >
+                            Baja
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger flex-fill"
+                            onClick={() => handleAccion(fila, 'eliminada')}
+                            title="Eliminar tarjeta"
+                          >
+                            Eliminada
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

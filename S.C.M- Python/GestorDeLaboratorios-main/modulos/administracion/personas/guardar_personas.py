@@ -70,6 +70,19 @@ def registrar_persona():
                 telefono_emergencia
             ))
             conn.commit()
+            try:
+                new_id = cursor.lastrowid if hasattr(cursor, 'lastrowid') else None
+                if new_id:
+                    placeholder = '%s'
+                    if conn.__class__.__module__.startswith('sqlite3'):
+                        placeholder = '?'
+                    cursor.execute(
+                        f"INSERT INTO historial_acciones (modulo, entidad_id, entidad_tipo, accion, usuario, descripcion) VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})",
+                        ('personas', new_id, 'persona', 'create', session.get('usuario') if session else None, f'Persona registrada {nombre_completo}')
+                    )
+                    conn.commit()
+            except Exception:
+                pass
             flash("✅ Persona registrada correctamente.", "success")
             return redirect(url_for("index"))
     except pymysql.MySQLError as e:

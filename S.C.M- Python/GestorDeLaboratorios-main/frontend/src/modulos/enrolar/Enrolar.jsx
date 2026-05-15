@@ -15,7 +15,7 @@ export default function Enrolar({ onGoHome }) {
   const [tarjetaSuggestions, setTarjetaSuggestions] = useState([]);
   const [showTarjetaSuggestions, setShowTarjetaSuggestions] = useState(false);
   const tarjetaRef = useRef(null);
-  const [perfil, setPerfil] = useState({ nombre: '', datos: '' });
+  const [perfil, setPerfil] = useState({ nombre: '', perfil_acceso_lab_id: '' });
   // Static perfiles (keep them redundant and simple as requested)
   const [perfilesList] = useState([
     { id: 'estudiante', nombre: 'Estudiante' },
@@ -27,6 +27,90 @@ export default function Enrolar({ onGoHome }) {
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedPreview, setSelectedPreview] = useState(null);
+  const [enrolarList, setEnrolarList] = useState([]);
+  const [selectedEnrolar, setSelectedEnrolar] = useState(null);
+  const [tableLoading, setTableLoading] = useState(false);
+
+  const resetForm = () => {
+    setPersona({ nombre_completo: '', correo: '', tipo_sangre: '', documento_identidad: '' });
+    setSearchQuery('');
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setShowAll(false);
+    setSelectedPreview(null);
+    setTarjeta({ uid: '', nombre_completo: '', correo: '', pin: '' });
+    setTarjetaQuery('');
+    setPerfil({ nombre: '', perfil_acceso_lab_id: '' });
+    setSelectedEnrolar(null);
+  };
+
+  const loadEnrolarList = async () => {
+    setTableLoading(true);
+    try {
+      const res = await fetch('/api/enrolar', { credentials: 'include' });
+      if (!res.ok) return;
+      const data = await res.json();
+      setEnrolarList(data || []);
+    } catch (err) {
+      console.error('Error cargando lista de enrolados', err);
+    }
+    setTableLoading(false);
+  };
+
+  const handleCancelEdit = () => {
+    resetForm();
+    setMsg('Edición cancelada');
+  };
+
+  const handleEditEnrolar = (row) => {
+    setSelectedEnrolar(row);
+    setPersona({ 
+      nombre_completo: row.nombre_completo || '', 
+      correo: row.correo || '', 
+      tipo_sangre: row.tipo_sangre || '', 
+      documento_identidad: row.documento_identidad || '',
+      id: row.persona_id 
+    });
+    setSearchQuery(row.nombre_completo || '');
+    setSelectedPreview({ 
+      nombre_completo: row.nombre_completo || '', 
+      correo: row.correo || '', 
+      documento_identidad: row.documento_identidad || '', 
+      tipo_sangre: row.tipo_sangre || '' 
+    });
+    setTarjeta({ uid: row.tarjeta_uid || '', nombre_completo: row.nombre_completo || '', correo: row.correo || '', pin: row.pin || '' });
+    setTarjetaQuery(row.tarjeta_uid || '');
+    setPerfil({ nombre: row.perfil || '', perfil_acceso_lab_id: row.perfil_id });
+    setMsg(`Editando enrolamiento #${row.id}`);
+  };
+
+  const handleUpdateEnrolarAction = async (row, accion, estado = undefined) => {
+    try {
+      const body = { accion };
+      if (estado !== undefined) {
+        body.estado = estado;
+      }
+      const res = await fetch(`/api/enrolar/${row.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMsg(`Acción '${accion}' aplicada correctamente.`);
+        await loadEnrolarList();
+        if (accion === 'editado') {
+          handleEditEnrolar(row);
+        }
+      } else {
+        setMsg('Error al aplicar acción');
+      }
+    } catch (err) {
+      setMsg('Error de conexión al aplicar acción');
+      console.error(err);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -35,18 +119,45 @@ export default function Enrolar({ onGoHome }) {
     if (!tarjeta.uid || tarjeta.uid.trim() === '') { setMsg('UID de tarjeta es requerido'); return; }
     setMsg('Enrolando...'); setLoading(true);
     try {
-      const res = await fetch('/api/enrolar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ persona, tarjeta, perfil }), credentials: 'include' });
+      const url = selectedEnrolar ? `/api/enrolar/${selectedEnrolar.id}` : '/api/enrolar';
+      const method = selectedEnrolar ? 'PUT' : 'POST';
+      const body = { persona, tarjeta, perfil };
+      if (selectedEnrolar) {
+        body.estado = selectedEnrolar.estado;
+        body.accion = 'editado';
+      }
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), credentials: 'include' });
       const j = await res.json();
       if (res.ok) {
-        setMsg('Enrolado correctamente. IDs: ' + JSON.stringify(j));
-        setPersona({ nombre_completo: '', correo: '', tipo_sangre: '' });
-        setTarjeta({ uid: '', nombre_completo: '', correo: '' });
-        setPerfil({ nombre: '', datos: '' });
+        if (selectedEnrolar) {
+          setMsg('Enrolamiento actualizado correctamente.');
+        } else {
+          setMsg('Enrolado correctamente. IDs: ' + JSON.stringify(j));
+          const newRow = {
+            id: j.enrolar_id || null,
+            persona_id: j.persona_id || null,
+            tarjeta_id: j.tarjeta_id || null,
+            tarjeta_uid: tarjeta.uid || '-',
+            pin: tarjeta.pin || '-',
+            perfil: perfil.nombre || '-',
+            estado: 1,
+            accion: 'activo',
+            fecha_de_registro: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            nombre_completo: persona.nombre_completo || '-',
+            correo: persona.correo || '-',
+            documento_identidad: persona.documento_identidad || '-',
+            tipo_sangre: persona.tipo_sangre || '-'
+          };
+          setEnrolarList(prev => [newRow, ...prev]);
+        }
+        resetForm();
+        await loadEnrolarList();
       } else {
         setMsg('Error: ' + (j.message || j.error || 'unknown'));
       }
     } catch (err) {
       setMsg('Error de conexión');
+      console.error(err);
     }
     setLoading(false);
   };
@@ -73,8 +184,13 @@ export default function Enrolar({ onGoHome }) {
         console.error('No se pudo cargar tarjetas', err);
       }
     };
-    loadTarjetas();
-    // Perfiles are static; no backend load required (redundant data)
+    const loadAll = async () => {
+      await load();
+      await loadTarjetas();
+      await loadEnrolarList();
+    };
+    loadAll();
+    // Perfiles son estáticos; no requieren backend aquí
   }, []);
 
   useEffect(() => {
@@ -127,7 +243,13 @@ export default function Enrolar({ onGoHome }) {
   };
 
   const selectPersona = (p) => {
-    setPersona({ nombre_completo: p.nombre_completo || p.nombre || '', correo: p.correo || '', tipo_sangre: p.tipo_sangre || '' , id: p.id });
+    setPersona({ 
+      nombre_completo: p.nombre_completo || p.nombre || '', 
+      correo: p.correo || '', 
+      tipo_sangre: p.tipo_sangre || '', 
+      documento_identidad: p.documento_identidad || '',
+      id: p.id 
+    });
     setSearchQuery(p.nombre_completo || p.nombre || '');
     setShowSuggestions(false);
     setShowAll(false);
@@ -306,6 +428,9 @@ export default function Enrolar({ onGoHome }) {
             <input className="form-control" placeholder="Correo" value={persona.correo} onChange={e => setPersona({...persona, correo: e.target.value})} />
           </div>
           <div className="mb-2">
+            <input className="form-control" placeholder="Documento de identidad (Carnet)" value={persona.documento_identidad} onChange={e => setPersona({...persona, documento_identidad: e.target.value})} />
+          </div>
+          <div className="mb-2">
             <select className="form-select" value={persona.tipo_sangre || ''} onChange={e => setPersona({...persona, tipo_sangre: e.target.value})}>
               <option value="">Tipo de sangre...</option>
               <option value="A+">A+</option>
@@ -371,12 +496,12 @@ export default function Enrolar({ onGoHome }) {
               <button type="button" className="btn btn-outline-secondary" onClick={() => setShowPerfiles(!showPerfiles)}>
                 {showPerfiles ? 'Cerrar perfiles' : `Seleccionar perfil (${perfilesList.length})`}
               </button>
-              <button type="button" className="btn btn-sm btn-link" onClick={() => setPerfil({ nombre: '', datos: '' })}>Limpiar perfil</button>
+              <button type="button" className="btn btn-sm btn-link" onClick={() => setPerfil({ nombre: '', perfil_acceso_lab_id: '' })}>Limpiar perfil</button>
             </div>
             {showPerfiles && (
               <div className="list-group mt-1" style={{ maxHeight: '260px', overflowY: 'auto', zIndex: 1000 }}>
                 {perfilesList.map((pf) => (
-                  <button key={pf.id} type="button" className="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onClick={() => { setPerfil({ nombre: pf.nombre, perfil_id: pf.id }); setShowPerfiles(false); }}>
+                  <button key={pf.id} type="button" className="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onClick={() => { setPerfil({ nombre: pf.nombre, perfil_acceso_lab_id: pf.id }); setShowPerfiles(false); }}>
                     <div>
                       <strong>{pf.nombre}</strong>
                       <div className="small text-muted">Role key: {pf.id}</div>
@@ -390,7 +515,7 @@ export default function Enrolar({ onGoHome }) {
             )}
             {perfil && perfil.nombre && (
               <div className="mt-2">
-                <div><strong>Perfil seleccionado:</strong> {perfil.nombre} {perfil.perfil_id ? <small className="text-muted">(key: {perfil.perfil_id})</small> : null}</div>
+                <div><strong>Perfil seleccionado:</strong> {perfil.nombre} {perfil.perfil_acceso_lab_id ? <small className="text-muted">(key: {perfil.perfil_acceso_lab_id})</small> : null}</div>
               </div>
             )}
           </div>
@@ -413,7 +538,12 @@ export default function Enrolar({ onGoHome }) {
                   <div><strong>Perfil:</strong> {perfil && perfil.nombre ? perfil.nombre : '—'}</div>
                 </div>
                 <div className="mt-3">
-                  <button className="btn btn-lg btn-success" type="submit" style={{ backgroundImage: 'linear-gradient(90deg,#16a34a,#10b981)', border: 'none' }}>{loading ? 'Enrolando...' : 'Enrolar ahora'}</button>
+                  <button className="btn btn-lg btn-success me-2" type="submit" style={{ backgroundImage: 'linear-gradient(90deg,#16a34a,#10b981)', border: 'none' }}>{loading ? (selectedEnrolar ? 'Guardando...' : 'Enrolando...') : (selectedEnrolar ? 'Guardar cambios' : 'Enrolar ahora')}</button>
+                  {selectedEnrolar && (
+                    <button type="button" className="btn btn-lg btn-secondary" onClick={handleCancelEdit} disabled={loading}>
+                      Cancelar edición
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -424,6 +554,77 @@ export default function Enrolar({ onGoHome }) {
         </div>{/* end row */}
         </form>
         {msg && <div className="alert alert-info mt-3">{msg}</div>}
+
+        <div className="mt-4">
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h5 className="mb-0">Personas enroladas</h5>
+              <small className="text-muted">Mostrando {enrolarList.length} registro{enrolarList.length === 1 ? '' : 's'}</small>
+            </div>
+            <button type="button" className="btn btn-outline-secondary btn-sm" onClick={loadEnrolarList} disabled={tableLoading}>
+              {tableLoading ? 'Cargando...' : 'Actualizar lista'}
+            </button>
+          </div>
+          <div className="table-responsive">
+            <table className="table table-sm table-bordered table-striped align-middle">
+              <thead className="table-dark">
+                <tr>
+                  <th>ID</th>
+                  <th>Persona</th>
+                  <th>Correo</th>
+                  <th>Documento</th>
+                  <th>Tipo sangre</th>
+                  <th>Tarjeta UID</th>
+                  <th>PIN</th>
+                  <th>Perfil</th>
+                  <th>Estado</th>
+                  <th>Acción actual</th>
+                  <th>Fecha registro</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {enrolarList.length > 0 ? enrolarList.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.id}</td>
+                    <td>{row.nombre_completo || '-'}</td>
+                    <td>{row.correo || '-'}</td>
+                    <td>{row.documento_identidad || '-'}</td>
+                    <td>{row.tipo_sangre || '-'}</td>
+                    <td>{row.tarjeta_uid || '-'}</td>
+                    <td>{row.pin || '-'}</td>
+                    <td>{row.perfil || '-'}</td>
+                    <td>{row.estado === 1 || row.estado === '1' ? 'Activo' : 'Inactivo'}</td>
+                    <td>{row.accion || '-'}</td>
+                    <td>{row.fecha_de_registro || '-'}</td>
+                    <td>
+                      <div className="d-flex gap-1 flex-wrap">
+                        <button type="button" className="btn btn-sm btn-success" onClick={() => handleUpdateEnrolarAction(row, 'activo', 1)}>
+                          Activo
+                        </button>
+                        <button type="button" className="btn btn-sm btn-warning" onClick={() => handleUpdateEnrolarAction(row, 'inactivo', 0)}>
+                          Inactivo
+                        </button>
+                        <button type="button" className="btn btn-sm btn-danger" onClick={() => handleUpdateEnrolarAction(row, 'eliminado', 0)}>
+                          Eliminado
+                        </button>
+                        <button type="button" className="btn btn-sm btn-primary" onClick={() => handleUpdateEnrolarAction(row, 'editado')}>
+                          Editado
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={11} className="text-center text-muted">
+                      No hay enrolamientos registrados aún.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -15,38 +15,44 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
 
   return (
     <div className="container mt-4">
-      <h2>Reporte de Historial de Accesos</h2>
+      <h2>Historial de Accesos</h2>
       <div className="text-start mb-3">
         <button className="btn btn-outline-secondary" onClick={onVolver}>
           ← Volver al Módulo de Reportes
         </button>
       </div>
       <form className="row g-3 mb-4" onSubmit={handleSubmit}>
-        <div className="col-md-3">
+        <div className="col-md-2">
           <label className="form-label">Fecha Desde</label>
           <input type="date" className="form-control" name="fecha_desde" value={form.fecha_desde || ''} onChange={handleChange} />
         </div>
-        <div className="col-md-3">
+        <div className="col-md-2">
           <label className="form-label">Fecha Hasta</label>
           <input type="date" className="form-control" name="fecha_hasta" value={form.fecha_hasta || ''} onChange={handleChange} />
         </div>
         <div className="col-md-2">
-          <label className="form-label">Tipo de Acción</label>
-          <select className="form-select" name="tipo_accion" value={form.tipo_accion || ''} onChange={handleChange}>
+          <label className="form-label">Movimiento</label>
+          <select className="form-select" name="tipo_movimiento" value={form.tipo_movimiento || ''} onChange={handleChange}>
             <option value="">-- Todos --</option>
-            <option value="alta">Alta</option>
-            <option value="baja">Baja</option>
-            <option value="acceso permitido">Acceso Permitido</option>
-            <option value="acceso denegado">Acceso Denegado</option>
+            <option value="Entrada">Entrada</option>
+            <option value="Salida">Salida</option>
           </select>
         </div>
         <div className="col-md-2">
-          <label className="form-label">Usuario Responsable</label>
-          <input type="text" className="form-control" name="usuario_responsable" value={form.usuario_responsable || ''} onChange={handleChange} placeholder="Nombre o usuario" />
+          <label className="form-label">Resultado</label>
+          <select className="form-select" name="resultado" value={form.resultado || ''} onChange={handleChange}>
+            <option value="">-- Todos --</option>
+            <option value="Permitido">Permitido</option>
+            <option value="Denegado">Denegado</option>
+          </select>
         </div>
         <div className="col-md-2">
-          <label className="form-label">Tarjeta RFID</label>
-          <input type="text" className="form-control" name="tarjeta" value={form.tarjeta || ''} onChange={handleChange} placeholder="ID o código" />
+          <label className="form-label">Credencial</label>
+          <select className="form-select" name="credencial" value={form.credencial || ''} onChange={handleChange}>
+            <option value="">-- Todos --</option>
+            <option value="Tarjeta">Tarjeta</option>
+            <option value="PIN">PIN</option>
+          </select>
         </div>
         <div className="col-12 d-flex gap-2">
           <button className="btn btn-primary">🔍 Filtrar</button>
@@ -55,30 +61,46 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
           <button type="button" className="btn btn-danger" onClick={onExportPDF}>📄 Exportar a PDF</button>
         </div>
       </form>
-      <table className="table table-striped table-bordered table-hover">
-        <thead className="table-dark">
-          <tr>
-            <th>ID</th>
-            <th>Fecha y Hora</th>
-            <th>Acción</th>
-            <th>Usuario Responsable</th>
-            <th>Tarjeta RFID</th>
-          </tr>
-        </thead>
-        <tbody>
-          {resultados.length > 0 ? resultados.map((row, i) => (
-            <tr key={i}>
-              <td>{row.id}</td>
-              <td>{row.fecha_hora}</td>
-              <td>{row.accion}</td>
-              <td>{row.usuario_responsable}</td>
-              <td>{row.tarjeta}</td>
+      <div className="table-responsive">
+        <table className="table table-striped table-bordered table-hover">
+          <thead className="table-dark">
+            <tr>
+              <th>ID</th>
+              <th>Fecha y Hora</th>
+              <th>Persona</th>
+              <th>Movimiento</th>
+              <th>Resultado</th>
+              <th>Credencial</th>
             </tr>
-          )) : (
-            <tr><td colSpan={5} className="text-center">Sin resultados</td></tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {resultados.length > 0 ? resultados.map((row, i) => (
+              <tr key={i}>
+                <td>{row.id}</td>
+                <td>{row.fecha_hora}</td>
+                <td>{row.persona}</td>
+                <td>
+                  <span className={`badge ${row.movimiento === 'Entrada' ? 'bg-success' : 'bg-info'}`}>
+                    {row.movimiento}
+                  </span>
+                </td>
+                <td>
+                  <span className={`badge ${row.resultado === 'Permitido' ? 'bg-success' : 'bg-danger'}`}>
+                    {row.resultado}
+                  </span>
+                </td>
+                <td>
+                  <span className={`badge ${row.credencial === 'Tarjeta' ? 'bg-primary' : 'bg-warning'}`}>
+                    {row.credencial}
+                  </span>
+                </td>
+              </tr>
+            )) : (
+              <tr><td colSpan={6} className="text-center">Sin resultados</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

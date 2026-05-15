@@ -9,32 +9,53 @@ def accesos_personal():
     fecha_desde = request.args.get('fecha_desde', '')
     fecha_hasta = request.args.get('fecha_hasta', '')
     tipo_movimiento = request.args.get('tipo_movimiento', '')
+    resultado = request.args.get('resultado', '')
+    credencial = request.args.get('credencial', '')
     nombre_completo = request.args.get('nombre_completo', '')
     uid_tarjeta = request.args.get('uid_tarjeta', '')
 
-    # Construir consulta dinámica
-    query = "SELECT * FROM registro_accesos WHERE 1=1"
+    query = '''
+    SELECT
+        ra.id,
+        ra.fecha_hora,
+        COALESCE(p.nombre_completo, 'Desconocido') AS nombre_completo,
+        tm.nombre AS tipo_movimiento,
+        ra.resultado,
+        ra.credencial,
+        ra.tarjeta_uid,
+        ra.descripcion
+    FROM registro_acceso ra
+    LEFT JOIN enrolar e ON ra.enrolar_id = e.id
+    LEFT JOIN personas p ON e.persona_id = p.id
+    LEFT JOIN tipo_movimiento tm ON ra.tipo_movimiento_id = tm.id
+    WHERE 1=1
+    '''
     params = []
 
     if fecha_desde:
-        query += " AND fecha_hora >= %s"
+        query += " AND ra.fecha_hora >= %s"
         params.append(fecha_desde + " 00:00:00")
     if fecha_hasta:
-        query += " AND fecha_hora <= %s"
+        query += " AND ra.fecha_hora <= %s"
         params.append(fecha_hasta + " 23:59:59")
     if tipo_movimiento:
-        query += " AND tipo_movimiento = %s"
+        query += " AND tm.nombre = %s"
         params.append(tipo_movimiento)
+    if resultado:
+        query += " AND ra.resultado = %s"
+        params.append(resultado)
+    if credencial:
+        query += " AND ra.credencial = %s"
+        params.append(credencial)
     if nombre_completo:
-        query += " AND nombre_completo LIKE %s"
+        query += " AND p.nombre_completo LIKE %s"
         params.append(f"%{nombre_completo}%")
     if uid_tarjeta:
-        query += " AND uid_tarjeta LIKE %s"
+        query += " AND ra.tarjeta_uid LIKE %s"
         params.append(f"%{uid_tarjeta}%")
 
-    query += " ORDER BY fecha_hora DESC"
+    query += " ORDER BY ra.fecha_hora DESC"
 
-    # Conectar a la base de datos
     connection = get_connection()
     try:
         cursor = connection.cursor()
@@ -60,6 +81,8 @@ def accesos_personal():
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,
         tipo_movimiento=tipo_movimiento,
+        resultado=resultado,
+        credencial=credencial,
         nombre_completo=nombre_completo,
         uid_tarjeta=uid_tarjeta
     )

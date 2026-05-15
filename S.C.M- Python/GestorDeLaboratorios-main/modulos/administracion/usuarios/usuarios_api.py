@@ -45,7 +45,7 @@ def listar_usuarios():
 def actualizar_rol(id):
     data = request.get_json() or {}
     rol = data.get('rol')
-    allowed = ('estudiante', 'docente', 'auxiliar', 'admin')
+    allowed = ('administrador', 'docente', 'estudiante', 'auxiliar', 'invitado')
     if rol not in allowed:
         return jsonify({'error': 'invalid_role', 'allowed': allowed}), 400
 

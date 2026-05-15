@@ -63,7 +63,7 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
           <tr>
             <th>ID</th>
             <th>UID Tarjeta</th>
-            <th>Nombre del Usuario</th>
+            <th>Persona Asignada</th>
             <th>Acción</th>
             <th>Responsable</th>
             <th>Fecha y Hora</th>
@@ -73,11 +73,11 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
           {resultados.length > 0 ? resultados.map((row, i) => (
             <tr key={i}>
               <td>{row.id}</td>
-              <td>{row.uid_tarjeta}</td>
-              <td>{row.nombre_usuario}</td>
-              <td>{row.accion}</td>
-              <td>{row.responsable}</td>
-              <td>{row.fecha_hora}</td>
+              <td>{row.uid_tarjeta || row.uid || '-'}</td>
+              <td>{row.nombre_usuario || row.nombre_completo || '-'}</td>
+              <td>{row.accion === 'alta' ? 'Alta' : row.accion === 'baja' ? 'Baja' : row.accion === 'edicion' ? 'Edición' : row.accion || '-'}</td>
+              <td>{row.responsable || row.ejecutado_por || '-'}</td>
+              <td>{row.fecha_hora || '-'}</td>
             </tr>
           )) : (
             <tr><td colSpan={6} className="text-center">Sin resultados</td></tr>

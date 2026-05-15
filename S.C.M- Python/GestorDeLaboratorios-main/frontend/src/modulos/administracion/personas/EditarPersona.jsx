@@ -9,6 +9,7 @@ export default function EditarPersona({ persona, onSubmit, onCancel, messages })
     documento_identidad: persona?.documento_identidad || '',
     sexo: persona?.sexo || '',
     tipo_sangre: persona?.tipo_sangre || '',
+    estado: persona?.estado ?? 1,
     persona_emergencia: persona?.persona_emergencia || '',
     telefono_emergencia: persona?.telefono_emergencia || '',
   });
@@ -24,6 +25,7 @@ export default function EditarPersona({ persona, onSubmit, onCancel, messages })
       documento_identidad: persona?.documento_identidad || '',
       sexo: persona?.sexo || '',
       tipo_sangre: persona?.tipo_sangre || '',
+      estado: persona?.estado ?? 1,
       persona_emergencia: persona?.persona_emergencia || '',
       telefono_emergencia: persona?.telefono_emergencia || '',
     });
@@ -132,6 +134,25 @@ export default function EditarPersona({ persona, onSubmit, onCancel, messages })
               <option value="O-">O-</option>
             </select>
             <div className="invalid-feedback">Selecciona el tipo de sangre.</div>
+          </div>
+          <div className="col-md-6">
+            <label className="form-label">Estado *</label>
+            <div className="btn-group w-100" role="group">
+              <button
+                type="button"
+                className={`btn ${form.estado === 1 ? 'btn-success' : 'btn-outline-success'}`}
+                onClick={() => setForm({ ...form, estado: 1 })}
+              >
+                Activo
+              </button>
+              <button
+                type="button"
+                className={`btn ${form.estado === 0 ? 'btn-danger' : 'btn-outline-danger'}`}
+                onClick={() => setForm({ ...form, estado: 0 })}
+              >
+                Inactivo
+              </button>
+            </div>
           </div>
           <div className="col-md-6">
             <label className="form-label">Persona de Emergencia *</label>

@@ -167,8 +167,9 @@ export default function TopNav({ usuario, onLogout, onNavigate }) {
             </button>
             {open === 'reportes' && (
               <div id="submenu-reportes" className="submenu" role="menu" onMouseEnter={() => setOpen('reportes')} onMouseLeave={() => setOpen(null)}>
-                <button role="menuitem" onClick={() => onNavigate('reportes_ingresos')}>Ingresos de personas</button>
-                <button role="menuitem" onClick={() => onNavigate('tarjetas_historial')}>Historial tarjetas</button>
+                <button role="menuitem" onClick={() => onNavigate('reportes_ingresos')}>Historial de Registro de Tarjetas</button>
+                <button role="menuitem" onClick={() => onNavigate('personas_registradas_sin_tarjeta')}>Historial de Registro de Personas</button>
+                <button role="menuitem" onClick={() => onNavigate('tarjetas_historial')}>Historial de Enrolamiento </button>
                 <button role="menuitem" onClick={() => onNavigate('accesos_historial')}>Historial accesos</button>
               </div>
             )}

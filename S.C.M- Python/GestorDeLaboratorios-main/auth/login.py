@@ -5,8 +5,8 @@ app.secret_key = "TU_SECRETO_AQUI"  # Cambiar por algo seguro
 
 # Datos de ejemplo (simulando una base de datos)
 usuarios = {
-    "admin@uni.edu": {"password": "1234", "rol": "admin"}, 
-    "user@uni.edu": {"password": "abcd", "rol": "user"}
+    "admin@uni.edu": {"password": "1234", "rol": "administrador"}, 
+    "user@uni.edu": {"password": "abcd", "rol": "estudiante"}
 }
 
 @app.route('/')
