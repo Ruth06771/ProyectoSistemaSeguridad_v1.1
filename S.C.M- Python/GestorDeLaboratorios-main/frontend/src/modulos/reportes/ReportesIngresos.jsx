@@ -20,9 +20,24 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
     window.open(`/reporte_tarjetas?${params}`, '_blank');
   };
 
-  useEffect(() => {
-    if (onFiltrar) onFiltrar(filtros || {});
+  const normalizeAccionLabel = (accion) => {
+    const value = String(accion || '').trim().toLowerCase();
+    if (value === 'creada' || value === 'alta') return 'Alta';
+    if (value === 'baja') return 'Baja';
+    if (value === 'editada' || value === 'edicion' || value === 'modificada') return 'Editada';
+    if (value === 'eliminada') return 'Eliminada';
+    return accion || '-';
+  };
 
+  const normalizeUid = (row) => {
+    return row.uid_tarjeta || row.uid || row.tarjeta || row.tarjeta_uid || '';
+  };
+
+  const normalizeResponsable = (row) => {
+    return row.responsable || row.ejecutado_por || row.usuario || 'Sistema';
+  };
+
+  useEffect(() => {
     const fetchTarjetasRegistradas = async () => {
       try {
         const response = await fetch('/api/tarjetas', { credentials: 'include' });
@@ -42,7 +57,17 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
     };
 
     fetchTarjetasRegistradas();
+    // Cargar datos iniciales al montar el componente
+    if (onFiltrar) onFiltrar(form || {});
   }, []);
+
+  // Auto-refresh cada 10 segundos para detectar cambios en tarjetas
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (onFiltrar) onFiltrar(form || {});
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [form, onFiltrar]);
 
   return (
     <div className="container mt-4">
@@ -120,7 +145,7 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
           />
         </div>
 
-        <div className="col-12 d-flex gap-2">
+        <div className="col-12 d-flex gap-2 flex-wrap">
           <button className="btn btn-primary" type="submit">🔍 Filtrar</button>
           <button
             type="button"
@@ -146,7 +171,6 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
           <tr>
             <th>ID</th>
             <th>UID Tarjeta</th>
-            <th>Persona Asignada</th>
             <th>Acción</th>
             <th>Responsable</th>
             <th>Fecha y Hora</th>
@@ -155,22 +179,21 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
         <tbody>
           {resultados.length > 0 ? (
             resultados.map((row, i) => {
-              const uid = row.uid_tarjeta || row.uid || row.tarjeta || '';
-              const tarjetaRegistrada = tarjetasByUid[uid] || {};
+              const uid = normalizeUid(row);
+              const accionLabel = normalizeAccionLabel(row.accion);
               return (
                 <tr key={i}>
-                  <td>{row.id}</td>
+                  <td>{row.id || '-'}</td>
                   <td>{uid || '-'}</td>
-                  <td>{row.nombre_usuario || row.nombre_completo || tarjetaRegistrada.nombre_completo || tarjetaRegistrada.nombre || '-'}</td>
-                  <td>{row.accion === 'alta' ? 'Alta' : row.accion === 'baja' ? 'Baja' : row.accion === 'editada' || row.accion === 'edicion' ? 'Editada' : row.accion === 'eliminada' ? 'Eliminada' : row.accion || '-'}</td>
-                  <td>{row.responsable || row.ejecutado_por || tarjetaRegistrada.ejecutado_por || '-'}</td>
-                  <td>{row.fecha_hora || '-'}</td>
+                  <td>{accionLabel}</td>
+                  <td>{normalizeResponsable(row)}</td>
+                  <td>{row.fecha_hora || row.fecha_de_registro || '-'}</td>
                 </tr>
               );
             })
           ) : (
             <tr>
-              <td colSpan={6} className="text-center">
+              <td colSpan={5} className="text-center">
                 Sin resultados
               </td>
             </tr>

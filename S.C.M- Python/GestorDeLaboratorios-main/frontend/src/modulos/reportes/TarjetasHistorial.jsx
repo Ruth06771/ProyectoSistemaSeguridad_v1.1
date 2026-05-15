@@ -98,35 +98,27 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
         <thead className="table-dark">
           <tr>
             <th>ID</th>
-            <th>Nombre de la Persona</th>
-            <th>Tarjeta UID</th>
-            <th>PIN</th>
-            <th>Perfil</th>
+            <th>UID Tarjeta</th>
             <th>Acción</th>
             <th>Responsable</th>
             <th>Fecha y Hora</th>
-            <th>Estado</th>
           </tr>
         </thead>
         <tbody>
-          {resultados.length > 0 ? resultados.map((row, i) => (
-            <tr key={i}>
-              <td>{row.id || '-'}</td>
-              <td>{row.nombre_usuario || row.nombre_completo || row.nombre || '-'}</td>
-              <td>{row.tarjeta_uid || row.uid_tarjeta || row.uid || '-'}</td>
-              <td>{row.pin || '-'}</td>
-              <td>{row.perfil || '-'}</td>
-              <td>
-                <span className={`badge ${row.accion === 'activo' ? 'bg-success' : row.accion === 'inactivo' ? 'bg-warning' : row.accion === 'eliminado' ? 'bg-danger' : 'bg-secondary'}`}>
-                  {row.accion || '-'}
-                </span>
-              </td>
-              <td>{row.responsable || row.ejecutado_por || '-'}</td>
-              <td>{row.fecha_hora || row.fecha_de_registro || '-'}</td>
-              <td>{formatEstado(row.estado)}</td>
-            </tr>
-          )) : (
-            <tr><td colSpan={9} className="text-center">Sin resultados</td></tr>
+          {resultados.length > 0 ? resultados.map((row, i) => {
+            const uid = row.uid_tarjeta || row.uid || row.tarjeta || row.tarjeta_uid || '';
+            const accionLabel = row.accion === 'alta' ? 'Alta' : row.accion === 'baja' ? 'Baja' : row.accion === 'editada' || row.accion === 'edicion' ? 'Editada' : row.accion === 'eliminada' ? 'Eliminada' : row.accion || '-';
+            return (
+              <tr key={i}>
+                <td>{row.id || '-'}</td>
+                <td>{uid || '-'}</td>
+                <td>{accionLabel}</td>
+                <td>{row.responsable || row.ejecutado_por || '-'}</td>
+                <td>{row.fecha_hora || row.fecha_de_registro || '-'}</td>
+              </tr>
+            );
+          }) : (
+            <tr><td colSpan={5} className="text-center">Sin resultados</td></tr>
           )}
         </tbody>
       </table>

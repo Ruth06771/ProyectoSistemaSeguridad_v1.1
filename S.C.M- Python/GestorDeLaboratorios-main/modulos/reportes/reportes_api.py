@@ -18,7 +18,7 @@ def accesos_historial():
         filtros.append('ra.fecha_hora <= ?')
         valores.append(params['fecha_hasta'])
     if params.get('tipo_movimiento'):
-        filtros.append('tm.nombre = ?')
+        filtros.append('tm.movimiento = ?')
         valores.append(params['tipo_movimiento'])
     if params.get('resultado'):
         filtros.append('ra.resultado = ?')
@@ -93,51 +93,42 @@ def tarjetas_historial():
         filtros.append('fecha_hora <= ?')
         valores.append(f"{params['fecha_hasta']} 23:59:59")
     if params.get('accion'):
-        filtros.append('accion = ?')
-        valores.append(params['accion'])
-    if params.get('persona'):
-        filtros.append('nombre_completo LIKE ?')
-        valores.append(f"%{params['persona']}%")
+        accion_valor = params['accion'].lower().strip()
+        if accion_valor in ['alta', 'creada']:
+            filtros.append("LOWER(TRIM(ht.accion)) IN ('alta', 'creada')")
+        elif accion_valor == 'baja':
+            filtros.append("LOWER(TRIM(ht.accion)) = 'baja'")
+        elif accion_valor in ['editada', 'edicion', 'modificada']:
+            filtros.append("LOWER(TRIM(ht.accion)) IN ('editada', 'edicion', 'modificada')")
+        elif accion_valor == 'eliminada':
+            filtros.append("LOWER(TRIM(ht.accion)) = 'eliminada'")
+        else:
+            filtros.append("LOWER(TRIM(ht.accion)) = ?")
+            valores.append(accion_valor)
     if params.get('usuario'):
-        filtros.append('ejecutado_por LIKE ?')
+        filtros.append('ht.ejecutado_por LIKE ?')
         valores.append(f"%{params['usuario']}%")
     if params.get('tarjeta'):
-        filtros.append('uid LIKE ?')
+        filtros.append('(ht.uid LIKE ? OR t.uid LIKE ?)')
+        valores.append(f"%{params['tarjeta']}%")
         valores.append(f"%{params['tarjeta']}%")
     where = f"WHERE {' AND '.join(filtros)}" if filtros else ''
     # Usar la tabla creada en config/db.py: historial_tarjetas
     sql = f"""
     SELECT
         ht.id,
-        COALESCE(ht.nombre_completo, ht.nombre_usuario, ht.nombre, '') AS nombre_completo,
-        ht.uid AS uid_tarjeta,
-        t.pin AS pin,
-        COALESCE(
-            (SELECT pa.nombre
-             FROM perfil_acceso_lab pa
-             WHERE pa.id = (
-                 SELECT e.perfil_acceso_lab_id
-                 FROM enrolar e
-                 WHERE (e.tarjeta_id = ht.tarjeta_id OR e.tarjeta_uid = ht.uid)
-                   AND e.perfil_acceso_lab_id IS NOT NULL
-                 ORDER BY e.fecha_de_registro DESC
-                 LIMIT 1
-             )
-            ),
-            ''
-        ) AS perfil,
-        COALESCE(
-            (SELECT e.estado
-             FROM enrolar e
-             WHERE (e.tarjeta_id = ht.tarjeta_id OR e.tarjeta_uid = ht.uid)
-             ORDER BY e.fecha_de_registro DESC
-             LIMIT 1
-            ),
-            t.estado
-        ) AS estado,
-        ht.accion,
-        ht.ejecutado_por AS responsable,
-        ht.descripcion,
+        COALESCE(t.uid, ht.uid) AS uid_tarjeta,
+        CASE LOWER(TRIM(ht.accion))
+            WHEN 'creada' THEN 'alta'
+            WHEN 'alta' THEN 'alta'
+            WHEN 'baja' THEN 'baja'
+            WHEN 'editada' THEN 'editada'
+            WHEN 'edicion' THEN 'editada'
+            WHEN 'modificada' THEN 'editada'
+            WHEN 'eliminada' THEN 'eliminada'
+            ELSE LOWER(ht.accion)
+        END AS accion,
+        COALESCE(ht.ejecutado_por, 'Sistema') AS responsable,
         ht.fecha_hora
     FROM historial_tarjetas ht
     LEFT JOIN tarjetas t ON t.id = ht.tarjeta_id OR t.uid = ht.uid
@@ -150,7 +141,7 @@ def tarjetas_historial():
         try:
             cursor.execute(sql, valores)
             rows = cursor.fetchall()
-            # Normalize rows into dicts using cursor.description as a fallback
+            # Normalize rows into dicts
             cols = [c[0] for c in cursor.description] if cursor.description else []
             norm_rows = []
             for r in rows:
@@ -161,25 +152,7 @@ def tarjetas_historial():
                     norm_rows.append(dict(r))
                 except Exception:
                     norm_rows.append({cols[i]: (r[i] if i < len(r) else None) for i in range(len(cols))})
-            # Normalize column names so frontend can rely on stable keys
-            mapped = []
-            for r in norm_rows:
-                mapped.append({
-                    'id': r.get('id'),
-                    'uid_tarjeta': r.get('uid_tarjeta') or r.get('uid') or r.get('tarjeta_uid'),
-                    'tarjeta_uid': r.get('uid_tarjeta') or r.get('uid') or r.get('tarjeta_uid'),
-                    'nombre_completo': r.get('nombre_completo') or r.get('nombre_usuario') or r.get('nombre'),
-                    'nombre_usuario': r.get('nombre_completo') or r.get('nombre_usuario') or r.get('nombre'),
-                    'accion': r.get('accion'),
-                    'responsable': r.get('responsable') or r.get('ejecutado_por') or r.get('usuario'),
-                    'descripcion': r.get('descripcion'),
-                    'fecha_hora': r.get('fecha_hora'),
-                    'fecha_de_registro': r.get('fecha_hora') or r.get('fecha_de_registro'),
-                    'pin': r.get('pin'),
-                    'perfil': r.get('perfil'),
-                    'estado': r.get('estado')
-                })
-            rows = mapped
+            rows = norm_rows
         finally:
             try:
                 cursor.close()

@@ -31,32 +31,8 @@ def reporte_tarjetas():
     query = """
     SELECT
         ht.id,
-        COALESCE(ht.nombre_completo, '') AS nombre_completo,
-        ht.uid AS uid_tarjeta,
-        t.pin AS pin,
-        COALESCE(
-            (SELECT pa.nombre
-             FROM perfil_acceso_lab pa
-             WHERE pa.id = (
-                 SELECT e.perfil_acceso_lab_id
-                 FROM enrolar e
-                 WHERE (e.tarjeta_id = ht.tarjeta_id OR e.tarjeta_uid = ht.uid)
-                   AND e.perfil_acceso_lab_id IS NOT NULL
-                 ORDER BY e.fecha_de_registro DESC
-                 LIMIT 1
-             )
-            ),
-            ''
-        ) AS perfil,
-        COALESCE(
-            (SELECT e.estado
-             FROM enrolar e
-             WHERE (e.tarjeta_id = ht.tarjeta_id OR e.tarjeta_uid = ht.uid)
-             ORDER BY e.fecha_de_registro DESC
-             LIMIT 1
-            ),
-            t.estado
-        ) AS estado,
+        COALESCE(t.uid, ht.uid) AS tarjeta_uid,
+        ht.accion,
         ht.ejecutado_por AS responsable,
         ht.fecha_hora
     FROM historial_tarjetas ht
@@ -109,22 +85,19 @@ def reporte_tarjetas():
     elements = []
 
     styles = getSampleStyleSheet()
-    title = Paragraph("Historial de Enrolamiento", styles['Title'])
+    title = Paragraph("Historial de Registro de Tarjetas", styles['Title'])
     elements.append(title)
     elements.append(Spacer(1, 12))
 
     # Construir tabla de datos
-    data = [['ID', 'Nombre de la Persona', 'Tarjeta', 'PIN', 'Perfil', 'Fecha y Hora', 'Responsable', 'Estado']]
+    data = [['ID', 'UID Tarjeta', 'Acción', 'Responsable', 'Fecha y Hora']]
     for row in resultados:
         data.append([
             str(row.get('id') or ''),
-            str(row.get('nombre_completo') or ''),
-            str(row.get('uid_tarjeta') or row.get('uid') or ''),
-            str(row.get('pin') or ''),
-            str(row.get('perfil') or ''),
-            str(row.get('fecha_hora') or ''),
+            str(row.get('tarjeta_uid') or row.get('uid') or ''),
+            str(row.get('accion') or ''),
             str(row.get('responsable') or ''),
-            str(row.get('estado') if row.get('estado') is not None else '')
+            str(row.get('fecha_hora') or '')
         ])
 
     table = Table(data, repeatRows=1)

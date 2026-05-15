@@ -14,26 +14,37 @@ def historial_tarjetas():
     tarjeta = request.args.get('tarjeta', '')
 
     # Construir query dinámico
-    query = "SELECT * FROM historial_tarjetas WHERE 1=1"
+    query = """
+    SELECT
+        ht.id,
+        COALESCE(t.uid, ht.uid) AS tarjeta_uid,
+        ht.accion,
+        ht.ejecutado_por AS responsable,
+        ht.fecha_hora
+    FROM historial_tarjetas ht
+    LEFT JOIN tarjetas t ON t.id = ht.tarjeta_id OR t.uid = ht.uid
+    WHERE 1=1
+    """
     params = []
 
     if fecha_desde:
-        query += " AND ejecutado_en >= %s"
+        query += " AND ht.fecha_hora >= %s"
         params.append(fecha_desde + " 00:00:00")
     if fecha_hasta:
-        query += " AND ejecutado_en <= %s"
+        query += " AND ht.fecha_hora <= %s"
         params.append(fecha_hasta + " 23:59:59")
     if accion:
-        query += " AND accion = %s"
+        query += " AND ht.accion = %s"
         params.append(accion)
     if usuario:
-        query += " AND ejecutado_por LIKE %s"
+        query += " AND ht.ejecutado_por LIKE %s"
         params.append(f"%{usuario}%")
     if tarjeta:
-        query += " AND UID LIKE %s"
+        query += " AND (ht.uid LIKE %s OR t.uid LIKE %s)"
+        params.append(f"%{tarjeta}%")
         params.append(f"%{tarjeta}%")
 
-    query += " ORDER BY ejecutado_en DESC"
+    query += " ORDER BY ht.fecha_hora DESC"
 
     # Ejecutar consulta
     connection = get_connection()

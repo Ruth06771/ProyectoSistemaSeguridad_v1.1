@@ -53,7 +53,6 @@
         <tr>
             <th>ID</th>
             <th>UID Tarjeta</th>
-            <th>Nombre del Usuario</th>
             <th>Acción</th>
             <th>Responsable</th>
             <th>Fecha y Hora</th>
@@ -63,11 +62,10 @@
         {% for row in resultados %}
         <tr>
             <td>{{ row.id }}</td>
-            <td>{{ row.uid }}</td>
-            <td>{{ row.nombre_completo }}</td>
-            <td>{{ row.accion }}</td>
-            <td>{{ row.ejecutado_por }}</td>
-            <td>{{ row.ejecutado_en }}</td>
+            <td>{{ row.tarjeta_uid or row.uid or '-' }}</td>
+            <td>{{ row.accion or '-' }}</td>
+            <td>{{ row.responsable or row.ejecutado_por or '-' }}</td>
+            <td>{{ row.fecha_hora or '-' }}</td>
         </tr>
         {% endfor %}
     </tbody>

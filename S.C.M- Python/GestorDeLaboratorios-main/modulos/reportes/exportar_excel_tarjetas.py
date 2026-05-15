@@ -14,36 +14,12 @@ def exportar_excel_tarjetas():
     usuario = request.args.get('usuario', '')
     tarjeta = request.args.get('tarjeta', '')
 
-    # Construir consulta dinámica y unir datos de tarjeta/enrolamiento
+    # Construir consulta dinámica para el historial de tarjetas
     query = """
     SELECT
         ht.id,
-        COALESCE(ht.nombre_completo, '') AS nombre_completo,
-        ht.uid AS uid_tarjeta,
-        t.pin AS pin,
-        COALESCE(
-            (SELECT pa.nombre
-             FROM perfil_acceso_lab pa
-             WHERE pa.id = (
-                 SELECT e.perfil_acceso_lab_id
-                 FROM enrolar e
-                 WHERE (e.tarjeta_id = ht.tarjeta_id OR e.tarjeta_uid = ht.uid)
-                   AND e.perfil_acceso_lab_id IS NOT NULL
-                 ORDER BY e.fecha_de_registro DESC
-                 LIMIT 1
-             )
-            ),
-            ''
-        ) AS perfil,
-        COALESCE(
-            (SELECT e.estado
-             FROM enrolar e
-             WHERE (e.tarjeta_id = ht.tarjeta_id OR e.tarjeta_uid = ht.uid)
-             ORDER BY e.fecha_de_registro DESC
-             LIMIT 1
-            ),
-            t.estado
-        ) AS estado,
+        COALESCE(t.uid, ht.uid) AS tarjeta_uid,
+        ht.accion,
         ht.ejecutado_por AS responsable,
         ht.fecha_hora
     FROM historial_tarjetas ht
@@ -96,20 +72,17 @@ def exportar_excel_tarjetas():
     ws.title = "Historial Tarjetas"
 
     # Encabezados
-    headers = ['ID', 'Nombre de la Persona', 'Tarjeta', 'PIN', 'Perfil', 'Fecha y Hora', 'Responsable', 'Estado']
+    headers = ['ID', 'UID Tarjeta', 'Acción', 'Responsable', 'Fecha y Hora']
     ws.append(headers)
 
     # Rellenar filas
     for row in registros:
         ws.append([
             row.get('id'),
-            row.get('nombre_completo'),
-            row.get('uid_tarjeta') or row.get('uid'),
-            row.get('pin'),
-            row.get('perfil'),
-            row.get('fecha_hora'),
+            row.get('tarjeta_uid') or row.get('uid'),
+            row.get('accion'),
             row.get('responsable'),
-            row.get('estado')
+            row.get('fecha_hora')
         ])
 
     # Autoajustar ancho de columnas
