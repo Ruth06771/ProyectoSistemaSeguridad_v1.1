@@ -138,27 +138,36 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
         <thead className="table-dark">
           <tr>
             <th>ID</th>
-            <th>UID Tarjeta</th>
+            <th>Persona</th>
+            <th>Perfil</th>
+            <th>Credenciales</th>
+            <th>Estado</th>
             <th>Responsable</th>
-            <th>Acción</th>
             <th>Fecha y Hora</th>
           </tr>
         </thead>
         <tbody>
           {resultados.length > 0 ? resultados.map((row, i) => {
-            const uid = row.uid_tarjeta || row.uid || row.tarjeta || row.tarjeta_uid || '';
-            const accionLabel = getAccionLabel(row);
+            const persona = row.nombre_persona || row.persona || '-';
+            const perfil = row.perfil || '-';
+            const uid = row.tarjeta_uid || row.uid_tarjeta || row.uid || '-';
+            const pin = row.tarjeta_pin || row.pin || '-';
+            const estado = row.estado || row.accion || row.tipo || '-';
+            const responsable = row.responsable || row.ejecutado_por || 'Sistema';
+            const fecha = row.fecha_hora || row.fecha_de_registro || '-';
             return (
               <tr key={i}>
                 <td>{row.id || '-'}</td>
-                <td>{uid || '-'}</td>
-                <td>{row.responsable || row.ejecutado_por || '-'}</td>
-                <td>{accionLabel}</td>
-                <td>{row.fecha_hora || row.fecha_de_registro || '-'}</td>
+                <td>{persona}</td>
+                <td>{perfil}</td>
+                <td>{`UID: ${uid} / PIN: ${pin}`}</td>
+                <td>{estado}</td>
+                <td>{responsable}</td>
+                <td>{fecha}</td>
               </tr>
             );
           }) : (
-            <tr><td colSpan={5} className="text-center">Sin resultados</td></tr>
+            <tr><td colSpan={7} className="text-center">Sin resultados</td></tr>
           )}
         </tbody>
       </table>

@@ -172,6 +172,72 @@ def tarjetas_historial():
         connection.close()
 
 
+@reportes_api.route('/api/reportes/enrolamiento_historial', methods=['GET'])
+def enrolamiento_historial():
+    params = request.args
+    filtros = []
+    valores = []
+    if params.get('fecha_desde'):
+        filtros.append('fecha_hora >= ?')
+        valores.append(f"{params['fecha_desde']} 00:00:00")
+    if params.get('fecha_hasta'):
+        filtros.append('fecha_hora <= ?')
+        valores.append(f"{params['fecha_hasta']} 23:59:59")
+    if params.get('accion'):
+        filtros.append('LOWER(TRIM(estado)) = ?')
+        valores.append(params['accion'].strip().lower())
+    if params.get('responsable'):
+        filtros.append('LOWER(responsable) LIKE ?')
+        valores.append(f"%{params['responsable'].strip().lower()}%")
+    if params.get('persona'):
+        filtros.append('LOWER(nombre_persona) LIKE ?')
+        valores.append(f"%{params['persona'].strip().lower()}%")
+    if params.get('tarjeta'):
+        filtros.append('(LOWER(tarjeta_uid) LIKE ? OR LOWER(tarjeta_pin) LIKE ?)')
+        valores.append(f"%{params['tarjeta'].strip().lower()}%")
+        valores.append(f"%{params['tarjeta'].strip().lower()}%")
+    where = f"WHERE {' AND '.join(filtros)}" if filtros else ''
+    sql = f"""
+    SELECT
+        id,
+        enrolar_id,
+        persona_id,
+        nombre_persona,
+        perfil,
+        tarjeta_uid,
+        tarjeta_pin,
+        estado,
+        responsable,
+        descripcion,
+        fecha_hora
+    FROM historial_enrolamiento
+    {where}
+    ORDER BY fecha_hora DESC
+    """
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(sql, valores)
+            rows = cursor.fetchall()
+            cols = [c[0] for c in cursor.description] if cursor.description else []
+            norm_rows = []
+            for r in rows:
+                try:
+                    norm_rows.append(dict(r))
+                except Exception:
+                    norm_rows.append({cols[i]: (r[i] if i < len(r) else None) for i in range(len(cols))})
+            rows = norm_rows
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        return jsonify(rows)
+    finally:
+        connection.close()
+
+
 # Endpoint pequeño de métricas: contadores rápidos para dashboard
 @reportes_api.route('/api/metrics', methods=['GET'])
 def api_metrics():

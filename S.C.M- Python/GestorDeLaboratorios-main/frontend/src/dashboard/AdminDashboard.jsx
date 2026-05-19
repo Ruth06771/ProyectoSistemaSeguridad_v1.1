@@ -31,8 +31,11 @@ export default function AdminDashboard({ usuario, onLogout }) {
   const [resultadosTarjetas, setResultadosTarjetas] = useState([]);
   const [filtrosTarjetas, setFiltrosTarjetas] = useState({});
 
+  const [resultadosEnrolamientos, setResultadosEnrolamientos] = useState([]);
+  const [filtrosEnrolamientos, setFiltrosEnrolamientos] = useState({});
+
   const [resultadosPersonasSinTarjeta, setResultadosPersonasSinTarjeta] = useState([]);
-  const [filtrosPersonasSinTarjeta, setFiltrosPersonasSinTarjeta] = useState({});
+  const [filtrosPersonasSinTarjeta] = useState({});
 
   // Helpers
   const buildQuery = (obj) => {
@@ -78,7 +81,7 @@ export default function AdminDashboard({ usuario, onLogout }) {
   // Auto-cargar datos de tarjetas cuando se navega a la vista de historial
   useEffect(() => {
     if (view === 'tarjetas_historial') {
-      fetchTarjetas(filtrosTarjetas);
+      fetchEnrolamientos(filtrosEnrolamientos);
     }
   }, [view]);
 
@@ -122,6 +125,23 @@ export default function AdminDashboard({ usuario, onLogout }) {
     } catch (err) {
       console.error('Error fetching tarjetas historial:', err);
       setResultadosTarjetas([]);
+    }
+  };
+
+  const fetchEnrolamientos = async (filtros = {}) => {
+    setFiltrosEnrolamientos(filtros);
+    try {
+      const q = buildQuery(filtros);
+      const timestamp = new Date().getTime();
+      const separator = q ? '&' : '?';
+      const url = `/api/reportes/enrolamiento_historial${q ? `?${q}` : ''}${separator}_t=${timestamp}`;
+      const res = await fetch(url, { credentials: 'include' });
+      const data = await res.json();
+      const rows = Array.isArray(data) ? data : (data && data.value ? data.value : []);
+      setResultadosEnrolamientos(rows || []);
+    } catch (err) {
+      console.error('Error fetching enrolamiento historial:', err);
+      setResultadosEnrolamientos([]);
     }
   };
 
@@ -239,11 +259,11 @@ export default function AdminDashboard({ usuario, onLogout }) {
   else if (view === 'tarjetas_historial') content = (
     <TarjetasHistorial
       onVolver={() => setView('dashboard')}
-      onFiltrar={fetchTarjetas}
-      resultados={resultadosTarjetas}
-      filtros={filtrosTarjetas}
-      onExportExcel={(filters) => exportTarjetasExcel(filters || filtrosTarjetas)}
-      onExportPDF={(filters) => exportTarjetasPDF(filters || filtrosTarjetas)}
+      onFiltrar={fetchEnrolamientos}
+      resultados={resultadosEnrolamientos}
+      filtros={filtrosEnrolamientos}
+      onExportExcel={(filters) => exportTarjetasExcel(filters || filtrosEnrolamientos)}
+      onExportPDF={(filters) => exportTarjetasPDF(filters || filtrosEnrolamientos)}
     />
   );
   else {

@@ -289,6 +289,26 @@ def enrolar_persona_tarjeta():
 
             conn.commit()
 
+            # Record enrollment history
+            try:
+                hist_sql = "INSERT INTO historial_enrolamiento (enrolar_id, persona_id, nombre_persona, perfil, tarjeta_uid, tarjeta_pin, estado, responsable, descripcion) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                if conn.__class__.__module__.startswith('sqlite3'):
+                    hist_sql = hist_sql.replace('%s', '?')
+                hist_vals = (
+                    enrolar_id,
+                    persona_id,
+                    persona.get('nombre_completo') if persona else None,
+                    (perfil.get('nombre') if isinstance(perfil, dict) else perfil) if perfil else None,
+                    tarjeta.get('uid') if tarjeta else None,
+                    (tarjeta.get('pin') if tarjeta else None),
+                    action_value,
+                    session.get('usuario') if session else None,
+                    f"Enrolamiento {action_value} persona_id={persona_id} tarjeta_uid={tarjeta.get('uid') if tarjeta else None}"
+                )
+                cur.execute(hist_sql, hist_vals)
+            except Exception:
+                pass
+
             # Log actions
             try:
                 log_action(conn, 'personas', entidad_id=persona_id, entidad_tipo='persona', accion='create', usuario=session.get('usuario') if session else None, descripcion=f'Enrolada persona {persona.get("nombre_completo")}')
@@ -331,7 +351,10 @@ def listar_enrolamientos():
     try:
         cursor = connection.cursor()
         try:
-            sql = '''
+            cursor.execute("PRAGMA table_info(enrolar)")
+            cols = [c[1] for c in cursor.fetchall()]
+            date_field = 'fecha_de_registro' if 'fecha_de_registro' in cols else 'fecha_registro'
+            sql = f'''
             SELECT
                 e.id AS enrolar_id,
                 e.persona_id,
@@ -340,7 +363,7 @@ def listar_enrolamientos():
                 e.perfil_acceso_lab_id,
                 e.estado AS enrolar_estado,
                 e.accion AS enrolar_accion,
-                e.fecha_registro,
+                e.{date_field} AS fecha_registro,
                 p.nombre_completo AS persona_nombre,
                 p.correo AS persona_correo,
                 p.documento_identidad AS persona_documento,
@@ -349,12 +372,19 @@ def listar_enrolamientos():
                 t.uid AS tarjeta_uid_real,
                 t.pin AS tarjeta_pin,
                 t.estado AS tarjeta_estado,
-                pa.nombre AS perfil_nombre
+                pa.nombre AS perfil_nombre,
+                pf.nombre AS perfil_personal_nombre,
+                e.perfil_acceso_lab_id AS perfil_raw
             FROM enrolar e
             LEFT JOIN personas p ON p.id = e.persona_id
             LEFT JOIN tarjetas t ON t.id = e.tarjeta_id OR (e.tarjeta_uid IS NOT NULL AND t.uid = e.tarjeta_uid)
             LEFT JOIN perfil_acceso_lab pa ON pa.id = e.perfil_acceso_lab_id
-            ORDER BY e.fecha_registro DESC
+            LEFT JOIN (
+                SELECT persona_id, nombre
+                FROM perfiles
+                WHERE id IN (SELECT MAX(id) FROM perfiles GROUP BY persona_id)
+            ) pf ON pf.persona_id = p.id
+            ORDER BY e.{date_field} DESC
             '''
             cursor.execute(sql)
             rows = cursor.fetchall()
@@ -367,7 +397,7 @@ def listar_enrolamientos():
                     'tarjeta_id': row.get('tarjeta_id'),
                     'tarjeta_uid': row.get('tarjeta_uid_real') or row.get('tarjeta_uid'),
                     'perfil_id': row.get('perfil_acceso_lab_id'),
-                    'perfil': row.get('perfil_nombre'),
+                    'perfil': row.get('perfil_nombre') or row.get('perfil_personal_nombre') or (row.get('perfil_raw') if row.get('perfil_raw') is not None else None),
                     'accion': row.get('enrolar_accion'),
                     'estado': row.get('enrolar_estado'),
                     'fecha_de_registro': row.get('fecha_registro'),
@@ -465,6 +495,28 @@ def actualizar_enrolar(id):
                 cursor.execute(_apply_placeholder(sql, connection), update_values + [id])
 
             connection.commit()
+            # Record update in enrollment history
+            try:
+                hist_sql = "INSERT INTO historial_enrolamiento (enrolar_id, persona_id, nombre_persona, perfil, tarjeta_uid, tarjeta_pin, estado, responsable, descripcion) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                if connection.__class__.__module__.startswith('sqlite3'):
+                    hist_sql = hist_sql.replace('%s', '?')
+                perfil_name = None
+                if perfil:
+                    perfil_name = perfil.get('nombre') if isinstance(perfil, dict) else perfil
+                hist_vals = (
+                    id,
+                    persona_id,
+                    (persona.get('nombre_completo') if persona else None),
+                    perfil_name,
+                    (tarjeta.get('uid') if tarjeta else None),
+                    (tarjeta.get('pin') if tarjeta else None),
+                    (accion if accion is not None else ('editado' if 'editado' in (update_values or []) else None)),
+                    session.get('usuario') if session else None,
+                    f"Enrolamiento actualizado id={id} accion={accion}"
+                )
+                cursor.execute(_apply_placeholder(hist_sql, connection), hist_vals)
+            except Exception:
+                pass
         finally:
             try:
                 cursor.close()
@@ -482,8 +534,47 @@ def eliminar_enrolar(id):
         cursor = connection.cursor()
         try:
             placeholder = _sql_placeholder(connection)
+            # fetch details before deleting
+            cursor.execute(_apply_placeholder('SELECT persona_id, tarjeta_uid, tarjeta_id FROM enrolar WHERE id = %s', connection), (id,))
+            row = cursor.fetchone()
+            persona_id = None
+            tarjeta_uid = None
+            tarjeta_pin = None
+            if row:
+                persona_id = row[0] if isinstance(row, (list, tuple)) else (row.get('persona_id') if hasattr(row, 'get') else None)
+                tarjeta_uid = row[1] if isinstance(row, (list, tuple)) else (row.get('tarjeta_uid') if hasattr(row, 'get') else None)
+                tarjeta_id = row[2] if isinstance(row, (list, tuple)) else (row.get('tarjeta_id') if hasattr(row, 'get') else None)
+                # try to fetch pin from tarjetas if tarjeta_id available
+                try:
+                    if tarjeta_id:
+                        cursor.execute(_apply_placeholder('SELECT pin FROM tarjetas WHERE id = %s', connection), (tarjeta_id,))
+                        tp = cursor.fetchone()
+                        if tp:
+                            tarjeta_pin = tp[0] if isinstance(tp, (list, tuple)) else (tp.get('pin') if hasattr(tp, 'get') else None)
+                except Exception:
+                    pass
             cursor.execute(_apply_placeholder('DELETE FROM enrolar WHERE id = %s', connection), (id,))
             connection.commit()
+            # insert history record for deletion
+            try:
+                hist_sql = "INSERT INTO historial_enrolamiento (enrolar_id, persona_id, nombre_persona, perfil, tarjeta_uid, tarjeta_pin, estado, responsable, descripcion) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                if connection.__class__.__module__.startswith('sqlite3'):
+                    hist_sql = hist_sql.replace('%s', '?')
+                # try to get persona name
+                nombre_persona = None
+                try:
+                    if persona_id:
+                        cursor.execute(_apply_placeholder('SELECT nombre_completo FROM personas WHERE id = %s', connection), (persona_id,))
+                        pn = cursor.fetchone()
+                        if pn:
+                            nombre_persona = pn[0] if isinstance(pn, (list, tuple)) else (pn.get('nombre_completo') if hasattr(pn, 'get') else None)
+                except Exception:
+                    pass
+                hist_vals = (id, persona_id, nombre_persona, None, tarjeta_uid, tarjeta_pin, 'eliminado', session.get('usuario') if session else None, f'Enrolamiento eliminado id={id}')
+                cursor.execute(_apply_placeholder(hist_sql, connection), hist_vals)
+                connection.commit()
+            except Exception:
+                pass
         finally:
             try:
                 cursor.close()

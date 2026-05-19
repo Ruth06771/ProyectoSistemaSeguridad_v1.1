@@ -364,6 +364,24 @@ def _ensure_sqlite_schema(conn):
     ''')
 
     cur.execute('''
+    CREATE TABLE IF NOT EXISTS historial_enrolamiento (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        enrolar_id INTEGER,
+        persona_id INTEGER,
+        nombre_persona TEXT,
+        perfil TEXT,
+        tarjeta_uid TEXT,
+        tarjeta_pin TEXT,
+        estado TEXT,
+        responsable TEXT,
+        descripcion TEXT,
+        fecha_hora TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(enrolar_id) REFERENCES enrolar(id),
+        FOREIGN KEY(persona_id) REFERENCES personas(id)
+    )
+    ''')
+
+    cur.execute('''
     CREATE TABLE IF NOT EXISTS bitacora (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_sistema_id INTEGER,

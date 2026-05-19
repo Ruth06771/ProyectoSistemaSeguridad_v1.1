@@ -16,13 +16,7 @@ export default function Enrolar({ onGoHome }) {
   const [showTarjetaSuggestions, setShowTarjetaSuggestions] = useState(false);
   const tarjetaRef = useRef(null);
   const [perfil, setPerfil] = useState({ nombre: '', perfil_acceso_lab_id: '' });
-  // Static perfiles (keep them redundant and simple as requested)
-  const [perfilesList] = useState([
-    { id: 'estudiante', nombre: 'Estudiante' },
-    { id: 'docente', nombre: 'Docente' },
-    { id: 'auxiliar', nombre: 'Auxiliar' },
-    { id: 'admin', nombre: 'Administrador' }
-  ]);
+  const [perfilesList, setPerfilesList] = useState([]);
   const [showPerfiles, setShowPerfiles] = useState(false);
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -80,7 +74,8 @@ export default function Enrolar({ onGoHome }) {
     });
     setTarjeta({ uid: row.tarjeta_uid || '', nombre_completo: row.nombre_completo || '', correo: row.correo || '', pin: row.pin || '' });
     setTarjetaQuery(row.tarjeta_uid || '');
-    setPerfil({ nombre: row.perfil || '', perfil_acceso_lab_id: row.perfil_id });
+    const perfilName = row.perfil || (perfilesList.find((pf) => String(pf.id) === String(row.perfil_id))?.nombre || '');
+    setPerfil({ nombre: perfilName, perfil_acceso_lab_id: row.perfil_id });
     setMsg(`Editando enrolamiento #${row.id}`);
   };
 
@@ -184,13 +179,24 @@ export default function Enrolar({ onGoHome }) {
         console.error('No se pudo cargar tarjetas', err);
       }
     };
+    const loadPerfiles = async () => {
+      try {
+        const r = await fetch('/api/perfil_acceso_lab', { credentials: 'include' });
+        if (r.ok) {
+          const p = await r.json();
+          setPerfilesList(Array.isArray(p) ? p : []);
+        }
+      } catch (err) {
+        console.error('No se pudo cargar perfiles de acceso', err);
+      }
+    };
     const loadAll = async () => {
       await load();
       await loadTarjetas();
+      await loadPerfiles();
       await loadEnrolarList();
     };
     loadAll();
-    // Perfiles son estáticos; no requieren backend aquí
   }, []);
 
   useEffect(() => {
@@ -500,7 +506,12 @@ export default function Enrolar({ onGoHome }) {
             </div>
             {showPerfiles && (
               <div className="list-group mt-1" style={{ maxHeight: '260px', overflowY: 'auto', zIndex: 1000 }}>
-                {perfilesList.map((pf) => (
+                {(perfilesList.length > 0 ? perfilesList : [
+                  { id: 'estudiante', nombre: 'Estudiante' },
+                  { id: 'docente', nombre: 'Docente' },
+                  { id: 'auxiliar', nombre: 'Auxiliar' },
+                  { id: 'admin', nombre: 'Administrador' }
+                ]).map((pf) => (
                   <button key={pf.id} type="button" className="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onClick={() => { setPerfil({ nombre: pf.nombre, perfil_acceso_lab_id: pf.id }); setShowPerfiles(false); }}>
                     <div>
                       <strong>{pf.nombre}</strong>
