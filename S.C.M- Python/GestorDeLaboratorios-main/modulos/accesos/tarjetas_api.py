@@ -79,28 +79,39 @@ def registrar_tarjeta():
                 if isinstance(e, sqlite3.IntegrityError) or 'UNIQUE constraint failed' in str(e) or 'Duplicate entry' in str(e):
                     return jsonify({'error': 'duplicate_uid', 'message': 'El UID ya existe'}), 400
                 raise
+            
+            # Obtener ID de la tarjeta creada
+            tarjeta_id = None
+            try:
+                if hasattr(cursor, 'lastrowid'):
+                    tarjeta_id = cursor.lastrowid
+            except Exception:
+                pass
+            
+            # Registrar en historial
             try:
                 placeholder_hist = '?' if connection.__class__.__module__.startswith('sqlite3') else '%s'
+                fecha_hora_func = "datetime('now')" if connection.__class__.__module__.startswith('sqlite3') else 'NOW()'
                 sql_hist = f"""
                     INSERT INTO historial_tarjetas (tarjeta_id, uid, nombre_completo, accion, ejecutado_por, descripcion, fecha_hora)
-                    VALUES ({placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, datetime('now'))
+                    VALUES ({placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {fecha_hora_func})
                 """
-                if not connection.__class__.__module__.startswith('sqlite3'):
-                    sql_hist = sql_hist.replace("datetime('now')", 'NOW()')
+                usuario = session.get('usuario') if session else 'Sistema'
                 cursor.execute(sql_hist, (
-                    cursor.lastrowid if hasattr(cursor, 'lastrowid') else None,
+                    tarjeta_id,
                     str(valores[0] or ''),
                     str(valores[1] or ''),
                     'creada',
-                    session.get('usuario') if session else None,
-                    f'Tarjeta creada uid={valores[0]}'
+                    usuario,
+                    f'Tarjeta creada: {valores[1]} ({valores[0]})'
                 ))
                 connection.commit()
-            except Exception:
-                pass
+            except Exception as hist_err:
+                print(f"[ERROR] No se registró creación en historial: {hist_err}")
+            
             # Log action (audit)
             try:
-                log_action(connection, 'tarjetas', entidad_id=cursor.lastrowid if hasattr(cursor, 'lastrowid') else None, entidad_tipo='tarjeta', accion='create', usuario=session.get('usuario') if session else None, descripcion=f"Creada tarjeta uid={valores[0]}")
+                log_action(connection, 'tarjetas', entidad_id=tarjeta_id, entidad_tipo='tarjeta', accion='create', usuario=session.get('usuario') if session else 'Sistema', descripcion=f"Creada tarjeta uid={valores[0]}")
             except Exception:
                 pass
         finally:
@@ -156,13 +167,54 @@ def editar_tarjeta(id):
             cursor = connection.cursor()
             try:
                 placeholder = '%s'
-                params = (estado, id)
                 if connection.__class__.__module__.startswith('sqlite3'):
                     placeholder = '?'
-                cursor.execute(f"UPDATE tarjetas SET estado = {placeholder} WHERE id = {placeholder}", params)
+                cursor.execute(f"SELECT uid, nombre_completo, estado FROM tarjetas WHERE id = {placeholder}", (id,))
+                tarjeta = cursor.fetchone()
+                if not tarjeta:
+                    return jsonify({'error': 'Tarjeta no encontrada'}), 404
+
+                if hasattr(tarjeta, 'keys'):
+                    tarjeta_dict = dict(tarjeta)
+                    current_estado = tarjeta_dict.get('estado')
+                    uid = tarjeta_dict.get('uid')
+                    nombre_completo = tarjeta_dict.get('nombre_completo')
+                else:
+                    uid = tarjeta[0] if len(tarjeta) > 0 else ''
+                    nombre_completo = tarjeta[1] if len(tarjeta) > 1 else ''
+                    current_estado = tarjeta[2] if len(tarjeta) > 2 else None
+
+                accion_text = 'alta' if estado == 1 else 'baja'
+                descripcion = f"Tarjeta marcada como {accion_text}: {nombre_completo} ({uid})"
+                if current_estado is not None and int(current_estado) == estado:
+                    accion_text = 'sin cambio'
+                    descripcion = f'No hubo cambio de estado para tarjeta: {nombre_completo} ({uid})'
+
+                cursor.execute(f"UPDATE tarjetas SET estado = {placeholder} WHERE id = {placeholder}", (estado, id))
                 connection.commit()
+
                 try:
-                    log_action(connection, 'tarjetas', entidad_id=id, entidad_tipo='tarjeta', accion='update', usuario=session.get('usuario') if session else None, descripcion=f"Actualizado estado de tarjeta id={id} a {estado}")
+                    placeholder_hist = '?' if connection.__class__.__module__.startswith('sqlite3') else '%s'
+                    fecha_hora_func = "datetime('now')" if connection.__class__.__module__.startswith('sqlite3') else 'NOW()'
+                    sql_hist = f"""
+                        INSERT INTO historial_tarjetas (tarjeta_id, uid, nombre_completo, accion, ejecutado_por, descripcion, fecha_hora)
+                        VALUES ({placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {fecha_hora_func})
+                    """
+                    usuario = session.get('usuario') if session else 'Sistema'
+                    cursor.execute(sql_hist, (
+                        id,
+                        str(uid or ''),
+                        str(nombre_completo or ''),
+                        accion_text,
+                        usuario,
+                        descripcion
+                    ))
+                    connection.commit()
+                except Exception as hist_err:
+                    print(f"[ERROR] No se registró cambio de estado en historial: {hist_err}")
+
+                try:
+                    log_action(connection, 'tarjetas', entidad_id=id, entidad_tipo='tarjeta', accion=accion_text, usuario=session.get('usuario') if session else 'Sistema', descripcion=f"Actualizado estado de tarjeta id={id} a {estado}")
                 except Exception:
                     pass
             finally:
@@ -172,7 +224,7 @@ def editar_tarjeta(id):
                     pass
         finally:
             connection.close()
-        return jsonify({'success': True})
+        return jsonify({'success': True, 'accion': accion_text})
 
     campos = ['uid', 'nombre_completo', 'correo', 'pin', 'estado']
     valores = [data.get(campo) for campo in campos]
@@ -203,27 +255,30 @@ def editar_tarjeta(id):
                 sql = sql.replace('%s', '?')
             cursor.execute(sql, valores + [id])
             connection.commit()
+            
+            # Registrar cambios en historial
             try:
                 placeholder_hist = '?' if connection.__class__.__module__.startswith('sqlite3') else '%s'
+                fecha_hora_func = "datetime('now')" if connection.__class__.__module__.startswith('sqlite3') else 'NOW()'
                 sql_hist = f"""
                     INSERT INTO historial_tarjetas (tarjeta_id, uid, nombre_completo, accion, ejecutado_por, descripcion, fecha_hora)
-                    VALUES ({placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, datetime('now'))
+                    VALUES ({placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {fecha_hora_func})
                 """
-                if not connection.__class__.__module__.startswith('sqlite3'):
-                    sql_hist = sql_hist.replace("datetime('now')", 'NOW()')
+                usuario = session.get('usuario') if session else 'Sistema'
                 cursor.execute(sql_hist, (
                     id,
                     str(data.get('uid') or ''),
                     str(data.get('nombre_completo') or ''),
                     'editada',
-                    session.get('usuario') if session else None,
-                    f'Tarjeta editada id={id}'
+                    usuario,
+                    f'Tarjeta editada: {data.get("nombre_completo", "")} ({data.get("uid", "")})'
                 ))
                 connection.commit()
-            except Exception:
-                pass
+            except Exception as hist_err:
+                print(f"[ERROR] No se registró edición en historial: {hist_err}")
+            
             try:
-                log_action(connection, 'tarjetas', entidad_id=id, entidad_tipo='tarjeta', accion='update', usuario=session.get('usuario') if session else None, descripcion=f"Actualizada tarjeta id={id}")
+                log_action(connection, 'tarjetas', entidad_id=id, entidad_tipo='tarjeta', accion='update', usuario=session.get('usuario') if session else 'Sistema', descripcion=f"Actualizada tarjeta id={id}")
             except Exception:
                 pass
         finally:
@@ -259,27 +314,30 @@ def eliminar_tarjeta(id):
                     nombre_completo = tarjeta[1] if len(tarjeta) > 1 else None
             cursor.execute(f"DELETE FROM tarjetas WHERE id = {placeholder}", params)
             connection.commit()
+            
+            # Registrar en historial
             try:
                 placeholder_hist = '?' if connection.__class__.__module__.startswith('sqlite3') else '%s'
+                fecha_hora_func = "datetime('now')" if connection.__class__.__module__.startswith('sqlite3') else 'NOW()'
                 sql_hist = f"""
                     INSERT INTO historial_tarjetas (tarjeta_id, uid, nombre_completo, accion, ejecutado_por, descripcion, fecha_hora)
-                    VALUES ({placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, datetime('now'))
+                    VALUES ({placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {fecha_hora_func})
                 """
-                if not connection.__class__.__module__.startswith('sqlite3'):
-                    sql_hist = sql_hist.replace("datetime('now')", 'NOW()')
+                usuario = session.get('usuario') if session else 'Sistema'
                 cursor.execute(sql_hist, (
                     id,
                     uid,
                     nombre_completo,
                     'eliminada',
-                    session.get('usuario') if session else None,
-                    f'Tarjeta eliminada id={id}'
+                    usuario,
+                    f'Tarjeta eliminada: {nombre_completo} ({uid})'
                 ))
                 connection.commit()
-            except Exception:
-                pass
+            except Exception as hist_err:
+                print(f"[ERROR] No se registró eliminación en historial: {hist_err}")
+            
             try:
-                log_action(connection, 'tarjetas', entidad_id=id, entidad_tipo='tarjeta', accion='delete', usuario=session.get('usuario') if session else None, descripcion=f"Eliminada tarjeta id={id}")
+                log_action(connection, 'tarjetas', entidad_id=id, entidad_tipo='tarjeta', accion='delete', usuario=session.get('usuario') if session else 'Sistema', descripcion=f"Eliminada tarjeta id={id}")
             except Exception:
                 pass
         finally:
@@ -290,6 +348,7 @@ def eliminar_tarjeta(id):
         return jsonify({'success': True})
     finally:
         connection.close()
+
 
 
 # Buscar tarjetas por nombre o correo de persona (útil para enrolar: devolver UID+PIN por persona)
@@ -343,7 +402,7 @@ def registrar_accion_tarjeta(id):
                 placeholder = '?'
             
             # Obtener datos de la tarjeta primero
-            cursor.execute(f"SELECT * FROM tarjetas WHERE id = {placeholder}", (id,))
+            cursor.execute(f"SELECT id, uid, nombre_completo, correo, estado FROM tarjetas WHERE id = {placeholder}", (id,))
             tarjeta = cursor.fetchone()
             if not tarjeta:
                 return jsonify({'error': 'Tarjeta no encontrada'}), 404
@@ -352,47 +411,67 @@ def registrar_accion_tarjeta(id):
             if hasattr(tarjeta, 'keys'):
                 tarjeta_dict = dict(tarjeta)
             else:
-                # Si es tupla, crear dict manualmente (esto es un fallback)
-                tarjeta_dict = {'id': tarjeta[0], 'uid': tarjeta[1]}
+                # Si es tupla, mapear a dict manualmente
+                tarjeta_dict = {
+                    'id': tarjeta[0],
+                    'uid': tarjeta[1] if len(tarjeta) > 1 else None,
+                    'nombre_completo': tarjeta[2] if len(tarjeta) > 2 else None,
+                    'correo': tarjeta[3] if len(tarjeta) > 3 else None,
+                    'estado': tarjeta[4] if len(tarjeta) > 4 else None
+                }
             
-            uid = tarjeta_dict.get('uid')
-            usuario = session.get('usuario') if session else None
+            uid = tarjeta_dict.get('uid', '')
+            nombre_completo = tarjeta_dict.get('nombre_completo', '')
+            usuario = session.get('usuario') if session else 'Sistema'
             
             # Procesar la acción
             if accion == 'eliminada':
                 # Eliminar tarjeta
                 cursor.execute(f"DELETE FROM tarjetas WHERE id = {placeholder}", (id,))
                 connection.commit()
-                # Registrar en historial
-                sql_hist = f"""
-                    INSERT INTO historial_tarjetas (uid, nombre_completo, accion, ejecutado_por, descripcion, fecha_hora)
-                    VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, datetime('now'))
-                """
-                if not connection.__class__.__module__.startswith('sqlite3'):
-                    sql_hist = sql_hist.replace("datetime('now')", 'NOW()')
-                cursor.execute(sql_hist, (uid, None, 'eliminada', usuario, f'Tarjeta eliminada'))
-                connection.commit()
+                # Registrar en historial - SIEMPRE registrar, incluso si hay error
+                try:
+                    placeholder_hist = '?' if connection.__class__.__module__.startswith('sqlite3') else '%s'
+                    fecha_hora_func = "datetime('now')" if connection.__class__.__module__.startswith('sqlite3') else 'NOW()'
+                    sql_hist = f"""
+                        INSERT INTO historial_tarjetas (tarjeta_id, uid, nombre_completo, accion, ejecutado_por, descripcion, fecha_hora)
+                        VALUES ({placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {fecha_hora_func})
+                    """
+                    cursor.execute(sql_hist, (id, uid, nombre_completo, 'eliminada', usuario, f'Tarjeta eliminada: {nombre_completo} ({uid})'))
+                    connection.commit()
+                except Exception as hist_err:
+                    print(f"[ERROR] No se registró en historial (eliminada): {hist_err}")
             else:
                 # Alta o Baja: actualizar estado
                 new_estado = 1 if accion == 'alta' else 0
+                current_estado = tarjeta_dict.get('estado')
+                accion_text = accion
+                descripcion = f'Tarjeta marcada como {accion}: {nombre_completo} ({uid})'
+                if current_estado is not None and int(current_estado) == new_estado:
+                    accion_text = 'sin cambio'
+                    descripcion = f'No hubo cambio de estado para tarjeta: {nombre_completo} ({uid})'
+
                 cursor.execute(
                     f"UPDATE tarjetas SET estado = {placeholder} WHERE id = {placeholder}",
                     (new_estado, id)
                 )
                 connection.commit()
-                # Registrar en historial
-                sql_hist = f"""
-                    INSERT INTO historial_tarjetas (tarjeta_id, uid, nombre_completo, accion, ejecutado_por, descripcion, fecha_hora)
-                    VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, datetime('now'))
-                """
-                if not connection.__class__.__module__.startswith('sqlite3'):
-                    sql_hist = sql_hist.replace("datetime('now')", 'NOW()')
-                cursor.execute(sql_hist, (id, uid, None, accion, usuario, f'Tarjeta marcada como {accion}'))
-                connection.commit()
+                # Registrar en historial - SIEMPRE registrar, incluso si hay error
+                try:
+                    placeholder_hist = '?' if connection.__class__.__module__.startswith('sqlite3') else '%s'
+                    fecha_hora_func = "datetime('now')" if connection.__class__.__module__.startswith('sqlite3') else 'NOW()'
+                    sql_hist = f"""
+                        INSERT INTO historial_tarjetas (tarjeta_id, uid, nombre_completo, accion, ejecutado_por, descripcion, fecha_hora)
+                        VALUES ({placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {fecha_hora_func})
+                    """
+                    cursor.execute(sql_hist, (id, uid, nombre_completo, accion_text, usuario, descripcion))
+                    connection.commit()
+                except Exception as hist_err:
+                    print(f"[ERROR] No se registró en historial ({accion_text}): {hist_err}")
             
             try:
                 log_action(connection, 'tarjetas', entidad_id=id, entidad_tipo='tarjeta', 
-                          accion=accion, usuario=usuario, descripcion=f"Acción {accion} en tarjeta id={id}")
+                          accion=accion_text, usuario=usuario, descripcion=f"Acción {accion_text} en tarjeta id={id}")
             except Exception:
                 pass
             

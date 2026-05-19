@@ -94,14 +94,16 @@ def tarjetas_historial():
         valores.append(f"{params['fecha_hasta']} 23:59:59")
     if params.get('accion'):
         accion_valor = params['accion'].lower().strip()
-        if accion_valor in ['alta', 'creada']:
-            filtros.append("LOWER(TRIM(ht.accion)) IN ('alta', 'creada')")
-        elif accion_valor == 'baja':
-            filtros.append("LOWER(TRIM(ht.accion)) = 'baja'")
-        elif accion_valor in ['editada', 'edicion', 'modificada']:
-            filtros.append("LOWER(TRIM(ht.accion)) IN ('editada', 'edicion', 'modificada')")
-        elif accion_valor == 'eliminada':
-            filtros.append("LOWER(TRIM(ht.accion)) = 'eliminada'")
+        if accion_valor in ['alta', 'creada', 'activo']:
+            filtros.append("LOWER(TRIM(ht.accion)) IN ('alta', 'creada', 'activo')")
+        elif accion_valor in ['baja', 'inactivo', 'desactivado']:
+            filtros.append("LOWER(TRIM(ht.accion)) IN ('baja', 'inactivo', 'desactivado')")
+        elif accion_valor in ['editada', 'editado', 'edicion', 'modificada']:
+            filtros.append("LOWER(TRIM(ht.accion)) IN ('editada', 'editado', 'edicion', 'modificada')")
+        elif accion_valor in ['eliminada', 'eliminado']:
+            filtros.append("LOWER(TRIM(ht.accion)) IN ('eliminada', 'eliminado')")
+        elif accion_valor in ['sin cambio', 'sincambio', 'no cambio', 'nocambio']:
+            filtros.append("LOWER(TRIM(ht.accion)) IN ('sin cambio', 'sincambio', 'no cambio', 'nocambio')")
         else:
             filtros.append("LOWER(TRIM(ht.accion)) = ?")
             valores.append(accion_valor)
@@ -121,11 +123,18 @@ def tarjetas_historial():
         CASE LOWER(TRIM(ht.accion))
             WHEN 'creada' THEN 'alta'
             WHEN 'alta' THEN 'alta'
+            WHEN 'activo' THEN 'alta'
             WHEN 'baja' THEN 'baja'
+            WHEN 'inactivo' THEN 'baja'
+            WHEN 'desactivado' THEN 'baja'
             WHEN 'editada' THEN 'editada'
+            WHEN 'editado' THEN 'editada'
             WHEN 'edicion' THEN 'editada'
             WHEN 'modificada' THEN 'editada'
             WHEN 'eliminada' THEN 'eliminada'
+            WHEN 'eliminado' THEN 'eliminada'
+            WHEN 'sin cambio' THEN 'sin cambio'
+            WHEN 'sincambio' THEN 'sin cambio'
             ELSE LOWER(ht.accion)
         END AS accion,
         COALESCE(ht.ejecutado_por, 'Sistema') AS responsable,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import NuevaTarjetaRFID from './NuevaTarjetaRFID';
 
-function EditarTarjetaRFID({ id, onSuccess, onCancel }) {
+function EditarTarjetaRFID({ id, onSuccess, onCancel, onEdited }) {
   const [form, setForm] = useState({ uid: '', pin: '', estado: 1 });
   const [validated, setValidated] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -30,6 +30,7 @@ function EditarTarjetaRFID({ id, onSuccess, onCancel }) {
       const data = await res.json();
       if (data.success) {
         setMessages([["success", "Tarjeta actualizada correctamente"]]);
+        if (onEdited) onEdited();
         if (onSuccess) onSuccess();
       } else {
         setMessages([["danger", data.error || "Error al actualizar"]]);
@@ -86,6 +87,7 @@ export default function TarjetasRegistradas({ onGoHome }) {
   const [view, setView] = useState('list'); // 'list' | 'add' | 'edit'
   const [editId, setEditId] = useState(null);
   const [deleteMsg, setDeleteMsg] = useState('');
+  const [lastActionById, setLastActionById] = useState({});
 
   // Cargar tarjetas
   const fetchTarjetas = () => {
@@ -112,7 +114,7 @@ export default function TarjetasRegistradas({ onGoHome }) {
       if (!window.confirm('¿Seguro que deseas eliminar esta tarjeta?')) return;
     }
     
-    // Actualizar estado de forma optimista
+    // Actualizar estado de forma optimista para una mejor respuesta UI
     if (accion === 'alta' || accion === 'baja') {
       const newEstado = accion === 'alta' ? 1 : 0;
       setTarjetas(prev => prev.map(t => t.id === tarjeta.id ? { ...t, estado: newEstado } : t));
@@ -129,12 +131,27 @@ export default function TarjetasRegistradas({ onGoHome }) {
       });
       const data = await res.json();
       if (data.success) {
+        const labelMap = {
+          alta: 'Alta',
+          baja: 'Baja',
+          eliminada: 'Eliminada',
+          'sin cambio': 'Sin cambio'
+        };
+        const actionLabel = labelMap[data.accion] || labelMap[accion] || 'Accion'
+        setLastActionById(prev => ({
+          ...prev,
+          [tarjeta.id]: actionLabel
+        }));
         const mensajes = {
           'alta': 'Tarjeta dada de Alta',
           'baja': 'Tarjeta dada de Baja',
-          'eliminada': 'Tarjeta eliminada correctamente'
+          'eliminada': 'Tarjeta eliminada correctamente',
+          'sin cambio': 'No hubo cambio de estado en esta tarjeta'
         };
-        setDeleteMsg(mensajes[accion] || 'Acción realizada correctamente');
+        setDeleteMsg(mensajes[data.accion] || mensajes[accion] || 'Acción realizada correctamente');
+
+        // Refrescar la lista para sincronizar el estado y mostrar el historial correctamente
+        fetchTarjetas();
       } else {
         setDeleteMsg(data.error || `Error al ejecutar acción ${accion}`);
         // Si falla, recargar para restaurar el estado anterior
@@ -153,11 +170,26 @@ export default function TarjetasRegistradas({ onGoHome }) {
   const getEstadoText = (estado) => estado === 1 ? 'Activo' : 'Inactivo';
   const getEstadoBadgeClass = (estado) => estado === 1 ? 'bg-success' : 'bg-secondary';
 
+  const getAccionDisplay = (fila) => {
+    if (lastActionById[fila.id]) return lastActionById[fila.id];
+    if (fila.estado === 1 || fila.estado === '1' || fila.estado === true || fila.estado === 'Activo' || fila.estado === 'activo') return 'Alta';
+    if (fila.estado === 0 || fila.estado === '0' || fila.estado === false || fila.estado === 'Inactivo' || fila.estado === 'inactivo') return 'Baja';
+    return '-';
+  };
+
+  const getAccionBadgeClass = (accion) => {
+    if (accion === 'Alta') return 'bg-success';
+    if (accion === 'Baja') return 'bg-danger';
+    if (accion === 'Editada') return 'bg-info';
+    if (accion === 'Eliminada') return 'bg-danger';
+    return 'bg-secondary';
+  };
+
   if (view === 'add') {
     return <NuevaTarjetaRFID onSuccess={handleBack} onCancel={handleBack} onGoHome={onGoHome} />;
   }
   if (view === 'edit') {
-    return <EditarTarjetaRFID id={editId} onSuccess={handleBack} onCancel={handleBack} onGoHome={onGoHome} />;
+    return <EditarTarjetaRFID id={editId} onSuccess={handleBack} onEdited={() => setLastActionById(prev => ({ ...prev, [editId]: 'Editada' }))} onCancel={handleBack} onGoHome={onGoHome} />;
   }
 
   return (
@@ -184,12 +216,13 @@ export default function TarjetasRegistradas({ onGoHome }) {
                   <th>ID</th>
                   <th>UID</th>
                   <th>Estado</th>
+                  <th>Acción</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={4} className="text-center py-4"><span className="spinner-inline" /></td></tr>
+                  <tr><td colSpan={5} className="text-center py-4"><span className="spinner-inline" /></td></tr>
                 ) : tarjetas.length > 0 ? (
                   tarjetas.map((fila, i) => (
                     <tr key={i}>
@@ -198,6 +231,11 @@ export default function TarjetasRegistradas({ onGoHome }) {
                       <td>
                         <span className={`badge ${getEstadoBadgeClass(fila.estado)}`}>
                           {getEstadoText(fila.estado)}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge ${getAccionBadgeClass(getAccionDisplay(fila))}`}>
+                          {getAccionDisplay(fila)}
                         </span>
                       </td>
                       <td>
@@ -232,7 +270,7 @@ export default function TarjetasRegistradas({ onGoHome }) {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={4} className="text-center text-muted py-4">Sin tarjetas para mostrar</td>
+                    <td colSpan={5} className="text-center text-muted py-4">Sin tarjetas para mostrar</td>
                   </tr>
                 )}
               </tbody>

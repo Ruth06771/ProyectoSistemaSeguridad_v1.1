@@ -15,7 +15,7 @@ import os
 bp = Blueprint('exportar_pdf_tarjeta_historial_accesos', __name__)
 
 
-@bp.route('/reporte_tarjetas')
+@bp.route('/reporte_tarjetas_historial_accesos')
 def reporte_tarjetas():
     if not WEASYPRINT_AVAILABLE:
         return make_response('WeasyPrint is not installed.', 500)

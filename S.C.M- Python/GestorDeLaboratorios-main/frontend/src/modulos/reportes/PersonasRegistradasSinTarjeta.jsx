@@ -191,6 +191,7 @@ export default function PersonasRegistradasSinTarjeta({ onVolver }) {
       // Construir query string con filtros
       const params = new URLSearchParams();
       if (filtros.buscar) params.append('buscar', filtros.buscar);
+      if (filtros.nombre_persona) params.append('nombre', filtros.nombre_persona);
       if (filtros.responsable) params.append('responsable', filtros.responsable);
       if (filtros.fecha_desde) params.append('fecha_desde', filtros.fecha_desde);
 
@@ -233,12 +234,20 @@ export default function PersonasRegistradasSinTarjeta({ onVolver }) {
     const fromDate = parseDateValue(filters.fecha_desde);
 
     return list.filter(row => {
-      // Filtro por identificación (documento_identidad o nombre_completo)
+      // Filtro por identificación
       if (filters.buscar) {
         const searchLower = filters.buscar.toLowerCase();
         const documento = (row.documento_identidad || '').toLowerCase();
+        if (!documento.includes(searchLower)) {
+          return false;
+        }
+      }
+
+      // Filtro por nombre de la persona
+      if (filters.nombre_persona) {
+        const nombreLower = filters.nombre_persona.toLowerCase();
         const nombre = (row.nombre_completo || '').toLowerCase();
-        if (!documento.includes(searchLower) && !nombre.includes(searchLower)) {
+        if (!nombre.includes(nombreLower)) {
           return false;
         }
       }
@@ -459,8 +468,8 @@ export default function PersonasRegistradasSinTarjeta({ onVolver }) {
       )}
 
       {/* Filtros Reactivos */}
-      <form className="row g-3 mb-4" onSubmit={(e) => { e.preventDefault(); handleFiltrar(); }}>
-        <div className="col-md-4">
+      <form className="row g-3 mb-4 align-items-end" onSubmit={(e) => { e.preventDefault(); handleFiltrar(); }}>
+        <div className="col-lg-3 col-md-6">
           <label className="form-label">Identificación</label>
           <input
             type="text"
@@ -468,11 +477,23 @@ export default function PersonasRegistradasSinTarjeta({ onVolver }) {
             name="buscar"
             value={form.buscar || ''}
             onChange={handleChange}
-            placeholder="Buscar por nombre o cédula"
+            placeholder="Buscar por cédula"
           />
         </div>
 
-        <div className="col-md-4">
+        <div className="col-lg-3 col-md-6">
+          <label className="form-label">Nombre de la Persona</label>
+          <input
+            type="text"
+            className="form-control"
+            name="nombre_persona"
+            value={form.nombre_persona || ''}
+            onChange={handleChange}
+            placeholder="Nombre de la persona"
+          />
+        </div>
+
+        <div className="col-lg-3 col-md-6">
           <label className="form-label">Responsable del Registro</label>
           <input
             type="text"
@@ -484,7 +505,7 @@ export default function PersonasRegistradasSinTarjeta({ onVolver }) {
           />
         </div>
 
-        <div className="col-md-4">
+        <div className="col-lg-3 col-md-6">
           <label className="form-label">Desde (Fecha)</label>
           <input
             type="date"
@@ -560,7 +581,7 @@ export default function PersonasRegistradasSinTarjeta({ onVolver }) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="text-center text-muted">
+                  <td colSpan={6} className="text-center text-muted">
                     {error ? 'Error al cargar datos' : 'Sin resultados - No hay personas registradas que coincidan con los filtros'}
                   </td>
                 </tr>

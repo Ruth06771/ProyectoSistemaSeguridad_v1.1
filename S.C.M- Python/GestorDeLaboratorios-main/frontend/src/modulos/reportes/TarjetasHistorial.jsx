@@ -19,7 +19,11 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
 
   const handleChange = e => {
     const { name, value } = e.target;
-    setForm({ ...form, [name]: value });
+    const nextForm = { ...form, [name]: value };
+    setForm(nextForm);
+    if (name === 'accion' && onFiltrar) {
+      onFiltrar(nextForm);
+    }
   };
 
   const handleSubmit = e => {
@@ -27,20 +31,56 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
     if (onFiltrar) onFiltrar(form);
   };
 
+  const openDownload = (url) => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleExportPDF = () => {
+    if (onExportPDF) {
+      onExportPDF(form);
+      return;
+    }
     const params = new URLSearchParams(form).toString();
-    window.open(`/reporte_tarjetas?${params}`, '_blank');
+    openDownload(`/reporte_tarjetas?${params}`);
   };
 
   const handleExportExcel = () => {
+    if (onExportExcel) {
+      onExportExcel(form);
+      return;
+    }
     const params = new URLSearchParams(form).toString();
-    window.open(`/exportar_excel_tarjetas?${params}`, '_blank');
+    openDownload(`/exportar_excel_tarjetas?${params}`);
   };
 
   const formatEstado = value => {
     if (value === 1 || value === '1' || value === true || value === 'Activo' || value === 'activo') return 'Activo';
-    if (value === 0 || value === '0' || value === false) return 'Inactivo';
+    if (value === 0 || value === '0' || value === false || value === 'Inactivo' || value === 'inactivo') return 'Inactivo';
     return value || '-';
+  };
+
+  const normalizeActionValue = value => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim().toLowerCase();
+  };
+
+  const getAccionLabel = row => {
+    const rawValue = row.accion || row.tipo || row.movimiento || row.estado || row.estatus || row.estado_tarjeta || row.estado_actual || row.descripcion || '';
+    const accion = normalizeActionValue(rawValue);
+    if (accion === 'alta' || accion === 'activo' || accion === 'activado' || accion === '1' || accion === 'true' || accion === 'creada') return 'Alta';
+    if (accion === 'baja' || accion === 'inactivo' || accion === 'desactivado' || accion === '0' || accion === 'false') return 'Baja';
+    if (accion === 'editada' || accion === 'editado' || accion === 'edicion' || accion === 'edición' || accion === 'editar' || accion === 'edit' || accion.includes('edit')) return 'Editada';
+    if (accion === 'eliminada' || accion === 'eliminado' || accion === 'eliminar' || accion === 'borrada' || accion === 'borrado' || accion.includes('elim')) return 'Eliminada';
+    if (accion === 'sin cambio' || accion === 'sincambio' || accion === 'no cambio' || accion === 'nocambio') return 'Sin cambio';
+    if (accion === 'modificada' || accion.includes('modific')) return 'Editada';
+    if (accion) return accion.charAt(0).toUpperCase() + accion.slice(1);
+    return '-';
   };
 
   return (
@@ -64,10 +104,10 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
           <label className="form-label">Acción</label>
           <select className="form-select" name="accion" value={form.accion || ''} onChange={handleChange}>
             <option value="">-- Todas --</option>
-            <option value="activo">Activo</option>
-            <option value="inactivo">Inactivo</option>
-            <option value="eliminado">Eliminado</option>
-            <option value="editado">Editado</option>
+            <option value="alta">Alta</option>
+            <option value="baja">Baja</option>
+            <option value="editada">Editada</option>
+            <option value="eliminada">Eliminada</option>
           </select>
         </div>
         <div className="col-md-3">
@@ -99,21 +139,21 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
           <tr>
             <th>ID</th>
             <th>UID Tarjeta</th>
-            <th>Acción</th>
             <th>Responsable</th>
+            <th>Acción</th>
             <th>Fecha y Hora</th>
           </tr>
         </thead>
         <tbody>
           {resultados.length > 0 ? resultados.map((row, i) => {
             const uid = row.uid_tarjeta || row.uid || row.tarjeta || row.tarjeta_uid || '';
-            const accionLabel = row.accion === 'alta' ? 'Alta' : row.accion === 'baja' ? 'Baja' : row.accion === 'editada' || row.accion === 'edicion' ? 'Editada' : row.accion === 'eliminada' ? 'Eliminada' : row.accion || '-';
+            const accionLabel = getAccionLabel(row);
             return (
               <tr key={i}>
                 <td>{row.id || '-'}</td>
                 <td>{uid || '-'}</td>
-                <td>{accionLabel}</td>
                 <td>{row.responsable || row.ejecutado_por || '-'}</td>
+                <td>{accionLabel}</td>
                 <td>{row.fecha_hora || row.fecha_de_registro || '-'}</td>
               </tr>
             );

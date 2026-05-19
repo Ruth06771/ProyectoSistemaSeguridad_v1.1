@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import NuevaTarjetaRFID from './NuevaTarjetaRFID';
 
-function EditarTarjetaRFID({ id, onSuccess, onCancel }) {
+function EditarTarjetaRFID({ id, onSuccess, onCancel, onEdited }) {
   const [form, setForm] = useState({ uid: '', nombre_completo: '', correo: '' });
   const [validated, setValidated] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -30,6 +30,7 @@ function EditarTarjetaRFID({ id, onSuccess, onCancel }) {
       const data = await res.json();
       if (data.success) {
         setMessages([["success", "Tarjeta actualizada correctamente"]]);
+        if (onEdited) onEdited();
         if (onSuccess) onSuccess();
       } else {
         setMessages([["danger", data.error || "Error al actualizar"]]);
@@ -70,6 +71,7 @@ export default function TarjetasRegistradas() {
   const [view, setView] = useState('list'); // 'list' | 'add' | 'edit'
   const [editId, setEditId] = useState(null);
   const [message, setMessage] = useState('');
+  const [lastActionById, setLastActionById] = useState({});
   const [buscar, setBuscar] = useState('');
 
   // Cargar tarjetas
@@ -82,6 +84,19 @@ export default function TarjetasRegistradas() {
 
   const getEstadoText = (estado) => estado === 1 ? 'Activo' : 'Inactivo';
   const getEstadoBadgeClass = (estado) => estado === 1 ? 'bg-success' : 'bg-secondary';
+  const getAccionDisplay = (fila) => {
+    if (lastActionById[fila.id]) return lastActionById[fila.id];
+    if (fila.estado === 1 || fila.estado === '1' || fila.estado === true || fila.estado === 'Activo' || fila.estado === 'activo') return 'Alta';
+    if (fila.estado === 0 || fila.estado === '0' || fila.estado === false || fila.estado === 'Inactivo' || fila.estado === 'inactivo') return 'Baja';
+    return '-';
+  };
+  const getAccionBadgeClass = (accion) => {
+    if (accion === 'Alta') return 'bg-success';
+    if (accion === 'Baja') return 'bg-danger';
+    if (accion === 'Editada') return 'bg-info';
+    if (accion === 'Eliminada') return 'bg-danger';
+    return 'bg-secondary';
+  };
 
   const handleAccion = async (tarjeta, accion) => {
     if (accion === 'eliminada' && !window.confirm('¿Seguro que deseas eliminar esta tarjeta?')) return;
@@ -100,6 +115,10 @@ export default function TarjetasRegistradas() {
       });
       const data = await res.json();
       if (data.success) {
+        setLastActionById(prev => ({
+          ...prev,
+          [tarjeta.id]: accion === 'editada' ? 'Editada' : accion === 'alta' ? 'Alta' : accion === 'baja' ? 'Baja' : accion === 'eliminada' ? 'Eliminada' : accion
+        }));
         const mensajes = {
           alta: 'Tarjeta dada de Alta',
           baja: 'Tarjeta dada de Baja',
@@ -150,7 +169,7 @@ export default function TarjetasRegistradas() {
     return <NuevaTarjetaRFID onSuccess={handleBack} onCancel={handleBack} />;
   }
   if (view === 'edit') {
-    return <EditarTarjetaRFID id={editId} onSuccess={handleBack} onCancel={handleBack} />;
+    return <EditarTarjetaRFID id={editId} onSuccess={handleBack} onEdited={() => setLastActionById(prev => ({ ...prev, [editId]: 'Editada' }))} onCancel={handleBack} />;
   }
 
   return (
@@ -176,6 +195,7 @@ export default function TarjetasRegistradas() {
                   <th>Nombre</th>
                   <th>Correo</th>
                   <th>Estado</th>
+                  <th>Acción</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
@@ -189,6 +209,11 @@ export default function TarjetasRegistradas() {
                     <td>
                       <span className={`badge ${getEstadoBadgeClass(fila.estado)}`}>
                         {getEstadoText(fila.estado)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge ${getAccionBadgeClass(getAccionDisplay(fila))}`}>
+                        {getAccionDisplay(fila)}
                       </span>
                     </td>
                     <td>
@@ -222,7 +247,7 @@ export default function TarjetasRegistradas() {
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={6} className="text-center text-muted py-4">
+                    <td colSpan={7} className="text-center text-muted py-4">
                       Sin tarjetas para mostrar
                     </td>
                   </tr>

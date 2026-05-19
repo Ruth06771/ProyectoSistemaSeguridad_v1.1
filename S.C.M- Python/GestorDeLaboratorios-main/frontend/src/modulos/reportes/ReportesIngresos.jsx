@@ -5,9 +5,17 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
   const [tarjetasRegistradas, setTarjetasRegistradas] = useState([]);
   const [tarjetasByUid, setTarjetasByUid] = useState({});
 
+  useEffect(() => {
+    setForm(filtros || {});
+  }, [filtros]);
+
   const handleChange = e => {
     const { name, value } = e.target;
-    setForm({ ...form, [name]: value });
+    const nextForm = { ...form, [name]: value };
+    setForm(nextForm);
+    if (name === 'accion' && onFiltrar) {
+      onFiltrar(nextForm);
+    }
   };
 
   const handleSubmit = e => {
@@ -15,9 +23,23 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
     if (onFiltrar) onFiltrar(form);
   };
 
+  const openDownload = (url) => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleExportPDF = () => {
+    if (onExportPDF) {
+      onExportPDF(form);
+      return;
+    }
     const params = new URLSearchParams(form).toString();
-    window.open(`/reporte_tarjetas?${params}`, '_blank');
+    openDownload(`/reporte_tarjetas?${params}`);
   };
 
   const normalizeAccionLabel = (accion) => {
@@ -157,7 +179,18 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
           >
             🔃 Refresh
           </button>
-          <button type="button" className="btn btn-success" onClick={onExportExcel}>
+          <button
+            type="button"
+            className="btn btn-success"
+            onClick={() => {
+              if (onExportExcel) {
+                onExportExcel(form);
+                return;
+              }
+              const params = new URLSearchParams(form).toString();
+              openDownload(`/exportar_excel_tarjetas?${params}`);
+            }}
+          >
             📥 Exportar a Excel
           </button>
           <button type="button" className="btn btn-danger" onClick={handleExportPDF}>
@@ -180,7 +213,7 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
           {resultados.length > 0 ? (
             resultados.map((row, i) => {
               const uid = normalizeUid(row);
-              const accionLabel = normalizeAccionLabel(row.accion);
+              const accionLabel = normalizeAccionLabel(row.accion); 
               return (
                 <tr key={i}>
                   <td>{row.id || '-'}</td>

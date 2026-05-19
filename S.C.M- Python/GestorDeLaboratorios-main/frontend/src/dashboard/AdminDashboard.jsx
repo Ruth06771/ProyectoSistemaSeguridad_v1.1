@@ -77,15 +77,15 @@ export default function AdminDashboard({ usuario, onLogout }) {
 
   // Auto-cargar datos de tarjetas cuando se navega a la vista de historial
   useEffect(() => {
-    if (view === 'tarjetas_historial' && resultadosTarjetas.length === 0) {
-      fetchTarjetas({});
+    if (view === 'tarjetas_historial') {
+      fetchTarjetas(filtrosTarjetas);
     }
   }, [view]);
 
   // Auto-cargar datos de accesos cuando se navega a la vista de historial
   useEffect(() => {
-    if (view === 'accesos_historial' && resultadosAccesos.length === 0) {
-      fetchAccesos({});
+    if (view === 'accesos_historial') {
+      fetchAccesos(filtrosAccesos);
     }
   }, [view]);
 
@@ -139,25 +139,56 @@ export default function AdminDashboard({ usuario, onLogout }) {
     }
   };
 
+  const openDownload = (url) => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const parseFilename = (contentDisposition, url, mimeType) => {
+    let filename = '';
+    const match = /filename\*=UTF-8''([^;\n\r]+)/i.exec(contentDisposition) || /filename="?([^";]+)"?/i.exec(contentDisposition);
+    if (match && match[1]) {
+      try {
+        filename = decodeURIComponent(match[1]);
+      } catch (e) {
+        filename = match[1];
+      }
+    }
+    if (!filename) {
+      const type = mimeType || '';
+      if (type.includes('pdf')) filename = 'reporte.pdf';
+      else if (type.includes('spreadsheet') || type.includes('excel')) filename = 'reporte.xlsx';
+      else if (url.endsWith('.pdf')) filename = 'reporte.pdf';
+      else if (url.includes('exportar_excel')) filename = 'reporte.xlsx';
+      else filename = 'reporte';
+    }
+    return filename;
+  };
+
   // Export helpers
   const exportAccesosExcel = (filtros = {}) => {
     const q = buildQuery(filtros);
-    window.open(`/exportar_excel_accesos?${q}`, '_blank');
+    openDownload(`/exportar_excel_accesos?${q}`);
   };
 
   const exportAccesosPDF = (filtros = {}) => {
     const q = buildQuery(filtros);
-    window.open(`/reporte_accesos_personal?${q}`, '_blank');
+    openDownload(`/reporte_accesos_personal?${q}`);
   };
 
   const exportTarjetasExcel = (filtros = {}) => {
     const q = buildQuery(filtros);
-    window.open(`/exportar_excel_tarjetas?${q}`, '_blank');
+    openDownload(`/exportar_excel_tarjetas?${q}`);
   };
 
   const exportTarjetasPDF = (filtros = {}) => {
     const q = buildQuery(filtros);
-    window.open(`/reporte_tarjetas?${q}`, '_blank');
+    openDownload(`/reporte_tarjetas?${q}`);
   };
 
   let content = null;
@@ -176,8 +207,8 @@ export default function AdminDashboard({ usuario, onLogout }) {
       onFiltrar={fetchTarjetas}
       resultados={resultadosTarjetas}
       filtros={filtrosTarjetas}
-      onExportExcel={() => exportTarjetasExcel(filtrosTarjetas)}
-      onExportPDF={() => exportTarjetasPDF(filtrosTarjetas)}
+      onExportExcel={(filters) => exportTarjetasExcel(filters || filtrosTarjetas)}
+      onExportPDF={(filters) => exportTarjetasPDF(filters || filtrosTarjetas)}
     />
   );
   else if (view === 'permisos') content = <Permisos onGoHome={() => setView('dashboard')} />;
@@ -211,8 +242,8 @@ export default function AdminDashboard({ usuario, onLogout }) {
       onFiltrar={fetchTarjetas}
       resultados={resultadosTarjetas}
       filtros={filtrosTarjetas}
-      onExportExcel={() => exportTarjetasExcel(filtrosTarjetas)}
-      onExportPDF={() => exportTarjetasPDF(filtrosTarjetas)}
+      onExportExcel={(filters) => exportTarjetasExcel(filters || filtrosTarjetas)}
+      onExportPDF={(filters) => exportTarjetasPDF(filters || filtrosTarjetas)}
     />
   );
   else {

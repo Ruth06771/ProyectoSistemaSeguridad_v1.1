@@ -13,9 +13,86 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
     if (onFiltrar) onFiltrar(form);
   };
 
+  const downloadFile = (url) => {
+    return fetch(url, { credentials: 'include' })
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text();
+          const w = window.open();
+          if (w) {
+            w.document.write('<pre>' + escapeHtml(text) + '</pre>');
+            w.document.title = 'Error al exportar';
+          } else {
+            alert('Error al exportar: ' + res.status + ' ' + res.statusText);
+          }
+          throw new Error('Error al exportar');
+        }
+        const blob = await res.blob();
+        const contentDisposition = res.headers.get('Content-Disposition') || '';
+        const filename = parseFilename(contentDisposition, url, res.headers.get('Content-Type') || '', blob.type);
+        const urlObj = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = urlObj;
+        link.download = filename;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(urlObj);
+        return true;
+      });
+  };
+
+  const parseFilename = (contentDisposition, url, contentType, blobType) => {
+    let filename = '';
+    const match = /filename\*=UTF-8''([^;\n\r]+)/i.exec(contentDisposition) || /filename="?([^";]+)"?/i.exec(contentDisposition);
+    if (match && match[1]) {
+      try { filename = decodeURIComponent(match[1]); } catch (e) { filename = match[1]; }
+    }
+    if (!filename) {
+      const type = contentType || blobType || '';
+      if (type.includes('pdf')) filename = 'reporte.pdf';
+      else if (type.includes('spreadsheet') || type.includes('excel')) filename = 'reporte.xlsx';
+      else if (url.endsWith('.pdf')) filename = 'reporte.pdf';
+      else if (url.includes('exportar_excel')) filename = 'reporte.xlsx';
+      else filename = 'reporte';
+    }
+    return filename;
+  };
+
+  const escapeHtml = (unsafe) => {
+    return unsafe
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
   const handleExportPDF = () => {
     const params = new URLSearchParams(form).toString();
-    window.open(`/reporte_tarjetas?${params}`, '_blank');
+    downloadFile(`/reporte_tarjetas?${params}`).catch(() => {});
+  };
+
+  const handleExportExcel = () => {
+    const params = new URLSearchParams(form).toString();
+    downloadFile(`/exportar_excel_tarjetas?${params}`).catch(() => {});
+  };
+
+  const normalizeActionValue = value => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim().toLowerCase();
+  };
+
+  const getAccionLabel = row => {
+    const raw = normalizeActionValue(row.accion || row.tipo || row.movimiento || row.estado || row.estatus || row.estado_tarjeta || row.estado_actual);
+    if (['alta', 'creada', 'create', 'created', 'activo', 'activated', 'activado', '1', 'true'].includes(raw)) return 'Alta';
+    if (['baja', 'inactivo', 'desactivado', 'desactivada', 'inactive', 'desactivate', '0', 'false'].includes(raw)) return 'Baja';
+    if (['editada', 'editado', 'edicion', 'edición', 'editar', 'update', 'updated', 'modificada', 'modificado'].includes(raw)) return 'Editada';
+    if (['eliminada', 'eliminado', 'eliminar', 'deleted', 'delete'].includes(raw)) return 'Eliminada';
+    if (raw) return raw.charAt(0).toUpperCase() + raw.slice(1);
+    return '-';
   };
 
   return (
@@ -54,7 +131,7 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
         <div className="col-12 d-flex gap-2">
           <button className="btn btn-primary">🔍 Filtrar</button>
           <button type="button" className="btn btn-secondary" onClick={() => { setForm({}); if (onFiltrar) onFiltrar({}); }}>🔄 Limpiar</button>
-          <button type="button" className="btn btn-success" onClick={onExportExcel}>📥 Exportar a Excel</button>
+          <button type="button" className="btn btn-success" onClick={handleExportExcel}>📥 Exportar a Excel</button>
           <button type="button" className="btn btn-danger" onClick={handleExportPDF}>📄 Exportar a PDF</button>
         </div>
       </form>
@@ -64,8 +141,8 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
             <th>ID</th>
             <th>UID Tarjeta</th>
             <th>Persona Asignada</th>
-            <th>Acción</th>
             <th>Responsable</th>
+            <th>Acción</th>
             <th>Fecha y Hora</th>
           </tr>
         </thead>
@@ -75,8 +152,8 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
               <td>{row.id}</td>
               <td>{row.uid_tarjeta || row.uid || '-'}</td>
               <td>{row.nombre_usuario || row.nombre_completo || '-'}</td>
-              <td>{row.accion === 'alta' ? 'Alta' : row.accion === 'baja' ? 'Baja' : row.accion === 'edicion' ? 'Edición' : row.accion || '-'}</td>
               <td>{row.responsable || row.ejecutado_por || '-'}</td>
+              <td>{getAccionLabel(row)}</td>
               <td>{row.fecha_hora || '-'}</td>
             </tr>
           )) : (
