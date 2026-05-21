@@ -3,14 +3,31 @@ import React, { useState, useEffect } from 'react';
 export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros = {}, onExportExcel, onExportPDF, onVolver }) {
   const [form, setForm] = useState(filtros);
   const [loading, setLoading] = useState(false);
+  const [enrolarData, setEnrolarData] = useState([]);
 
-  // Cargar datos al montar el componente
-  useEffect(() => {
-    if (onFiltrar && Object.keys(resultados).length === 0) {
-      setLoading(true);
-      onFiltrar(form);
-      setLoading(false);
+  const loadEnrolarData = async () => {
+    try {
+      const res = await fetch('/api/enrolar', { credentials: 'include' });
+      if (!res.ok) {
+        setEnrolarData([]);
+        return;
+      }
+      const data = await res.json();
+      setEnrolarData(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error cargando personas enroladas:', err);
+      setEnrolarData([]);
     }
+  };
+
+  useEffect(() => {
+    if (onFiltrar && resultados.length === 0) {
+      setLoading(true);
+      Promise.resolve(onFiltrar(form)).finally(() => setLoading(false));
+    }
+    loadEnrolarData();
+    const interval = setInterval(loadEnrolarData, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -22,14 +39,43 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
     const nextForm = { ...form, [name]: value };
     setForm(nextForm);
     if (name === 'accion' && onFiltrar) {
-      onFiltrar(nextForm);
+      setLoading(true);
+      Promise.resolve(onFiltrar(nextForm)).finally(() => setLoading(false));
     }
   };
 
-  const handleSubmit = e => {
+  const handleSubmit = async e => {
     e.preventDefault();
-    if (onFiltrar) onFiltrar(form);
+    if (!onFiltrar) return;
+    setLoading(true);
+    await Promise.resolve(onFiltrar(form));
+    setLoading(false);
   };
+
+  const handleActualizar = async () => {
+    if (!onFiltrar) return;
+    setLoading(true);
+    await Promise.resolve(onFiltrar(form));
+    setLoading(false);
+  };
+
+  const handleLimpiar = async () => {
+    const emptyForm = {};
+    setForm(emptyForm);
+    if (!onFiltrar) return;
+    setLoading(true);
+    await Promise.resolve(onFiltrar(emptyForm));
+    setLoading(false);
+    await loadEnrolarData();
+  };
+
+  const getEnrolarRow = (row) => {
+    if (!enrolarData || enrolarData.length === 0) return null;
+    return enrolarData.find(item => item.id === row.enrolar_id || item.tarjeta_uid === row.tarjeta_uid || item.tarjeta_uid === row.uid_tarjeta);
+  };
+
+  const displayRows = resultados.length > 0 ? resultados : enrolarData;
+  const showingEnrolarData = resultados.length === 0;
 
   const openDownload = (url) => {
     const link = document.createElement('a');
@@ -83,9 +129,27 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
     return '-';
   };
 
+  const renderEstadoBadge = (rawEstado) => {
+    const label = formatEstado(rawEstado);
+    const normalized = normalizeActionValue(rawEstado);
+    if (normalized === 'eliminado' || normalized === 'eliminada' || normalized === 'delete' || normalized === 'deleted') {
+      return <span className="badge bg-danger">Eliminado</span>;
+    }
+    if (normalized === 'inactivo' || normalized === '0' || normalized === 'false') {
+      return <span className="badge bg-warning text-dark">Inactivo</span>;
+    }
+    if (normalized === 'activo' || normalized === '1' || normalized === 'true') {
+      return <span className="badge bg-success">Activo</span>;
+    }
+    return <span className="badge bg-secondary">{label}</span>;
+  };
+
   return (
     <div className="container mt-4">
-      <h2>📇 Historial de Enrolamiento</h2>
+      <div className="d-flex align-items-baseline justify-content-between mb-2">
+        <h2 className="mb-0">📇 Historial de Enrolamiento</h2>
+        <small className="text-muted">Datos sincronizados con personas enroladas cada 15s</small>
+      </div>
       <div className="text-start mb-3">
         <button className="btn btn-outline-secondary" onClick={onVolver} title="Regresar al panel de reportes">
           <span className="me-1">←</span> Volver al Módulo de Reportes
@@ -101,13 +165,12 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
           <input type="date" className="form-control" name="fecha_hasta" value={form.fecha_hasta || ''} onChange={handleChange} />
         </div>
         <div className="col-md-3">
-          <label className="form-label">Acción</label>
+          <label className="form-label">Estado</label>
           <select className="form-select" name="accion" value={form.accion || ''} onChange={handleChange}>
             <option value="">-- Todas --</option>
-            <option value="alta">Alta</option>
-            <option value="baja">Baja</option>
-            <option value="editada">Editada</option>
-            <option value="eliminada">Eliminada</option>
+            <option value="activo">Activo</option>
+            <option value="inactivo">Inactivo</option>
+            <option value="eliminado">Eliminado</option>
           </select>
         </div>
         <div className="col-md-3">
@@ -120,10 +183,10 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
         </div>
         <div className="col-12 d-flex gap-2 flex-wrap">
           <button className="btn btn-primary">🔍 Filtrar</button>
-          <button type="button" className="btn btn-outline-secondary" onClick={() => { setLoading(true); if (onFiltrar) { onFiltrar(form); setTimeout(() => setLoading(false), 500); } }}>
+          <button type="button" className="btn btn-outline-secondary" onClick={handleActualizar}>
             {loading ? '⏳ Actualizando...' : '🔄 Actualizar'}
           </button>
-          <button type="button" className="btn btn-secondary" onClick={() => { setForm({}); setLoading(true); if (onFiltrar) { onFiltrar({}); setTimeout(() => setLoading(false), 500); } }}>
+          <button type="button" className="btn btn-secondary" onClick={handleLimpiar}>
             🧹 Limpiar
           </button>
           <button type="button" className="btn btn-success" onClick={handleExportExcel}>
@@ -139,35 +202,53 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
           <tr>
             <th>ID</th>
             <th>Persona</th>
+            <th>Correo</th>
+            <th>Documento</th>
+            <th>Tipo sangre</th>
             <th>Perfil</th>
-            <th>Credenciales</th>
+            <th>Tarjeta UID</th>
+            <th>PIN</th>
             <th>Estado</th>
+            <th>Acción</th>
             <th>Responsable</th>
             <th>Fecha y Hora</th>
           </tr>
         </thead>
         <tbody>
-          {resultados.length > 0 ? resultados.map((row, i) => {
-            const persona = row.nombre_persona || row.persona || '-';
-            const perfil = row.perfil || '-';
-            const uid = row.tarjeta_uid || row.uid_tarjeta || row.uid || '-';
-            const pin = row.tarjeta_pin || row.pin || '-';
-            const estado = row.estado || row.accion || row.tipo || '-';
+          {displayRows.length > 0 ? displayRows.map((row, i) => {
+            const enrolar = showingEnrolarData ? row : getEnrolarRow(row);
+            const persona = enrolar?.nombre_completo || row.nombre_persona || row.persona || '-';
+            const correo = enrolar?.correo || row.correo || '-';
+            const documento = enrolar?.documento_identidad || row.documento_identidad || '-';
+            const tipoSangre = enrolar?.tipo_sangre || row.tipo_sangre || '-';
+            const perfil = enrolar?.perfil || row.perfil || '-';
+            const uid = enrolar?.tarjeta_uid || row.tarjeta_uid || row.uid_tarjeta || row.uid || '-';
+            const pin = enrolar?.pin || row.tarjeta_pin || row.pin || '-';
+            const estadoRaw = enrolar?.estado ?? row.estado ?? row.accion ?? row.tipo ?? row.estado_tarjeta ?? row.estado_actual ?? '-';
+            const estado = formatEstado(estadoRaw);
+            const accion = getAccionLabel(row);
+            const isDeleted = normalizeActionValue(estadoRaw) === 'eliminado' || normalizeActionValue(accion) === 'eliminada';
+            const rowClassName = isDeleted ? 'table-danger text-muted' : '';
             const responsable = row.responsable || row.ejecutado_por || 'Sistema';
-            const fecha = row.fecha_hora || row.fecha_de_registro || '-';
+            const fecha = row.fecha_hora || row.fecha_de_registro || enrolar?.fecha_de_registro || '-';
             return (
-              <tr key={i}>
+              <tr key={i} className={rowClassName}>
                 <td>{row.id || '-'}</td>
                 <td>{persona}</td>
+                <td>{correo}</td>
+                <td>{documento}</td>
+                <td>{tipoSangre}</td>
                 <td>{perfil}</td>
-                <td>{`UID: ${uid} / PIN: ${pin}`}</td>
-                <td>{estado}</td>
+                <td>{uid}</td>
+                <td>{pin}</td>
+                <td>{renderEstadoBadge(estadoRaw)}</td>
+                <td>{accion}</td>
                 <td>{responsable}</td>
                 <td>{fecha}</td>
               </tr>
             );
           }) : (
-            <tr><td colSpan={7} className="text-center">Sin resultados</td></tr>
+            <tr><td colSpan={12} className="text-center">Sin resultados</td></tr>
           )}
         </tbody>
       </table>

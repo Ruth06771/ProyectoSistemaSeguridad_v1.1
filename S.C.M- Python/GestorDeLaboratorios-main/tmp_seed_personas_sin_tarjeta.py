@@ -95,7 +95,7 @@ def seed_personas():
             sql = """
             INSERT INTO personas 
             (nombre_completo, fecha_nacimiento, correo, telefono_personal, 
-             documento_identidad, sexo, tipo_sangre, rol, estado)
+            documento_identidad, sexo, tipo_sangre, rol, estado)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
             
@@ -120,7 +120,7 @@ def seed_personas():
             # Crear registro en historial_acciones
             # Generar una fecha aleatoria en los últimos 7 días
             dias_atras = inserted_count % 7
-            fecha_registro = (datetime.now() - timedelta(days=dias_atras)).isoformat()
+            fecha_registro = (  - timedelta(days=dias_atras)).isoformat()
             
             log_action(
                 conn,

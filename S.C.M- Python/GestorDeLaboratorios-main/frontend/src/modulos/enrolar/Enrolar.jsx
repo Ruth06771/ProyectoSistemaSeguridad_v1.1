@@ -95,14 +95,34 @@ export default function Enrolar({ onGoHome }) {
       if (res.ok && data.success) {
         setMsg(`Acción '${accion}' aplicada correctamente.`);
         await loadEnrolarList();
-        if (accion === 'editado') {
-          handleEditEnrolar(row);
-        }
       } else {
-        setMsg('Error al aplicar acción');
+        setMsg(data.error || data.message || 'Error al aplicar acción');
       }
     } catch (err) {
       setMsg('Error de conexión al aplicar acción');
+      console.error(err);
+    }
+  };
+
+  const handleDeleteEnrolar = async (row) => {
+    if (!window.confirm('¿Eliminar este enrolamiento? Esta acción no se puede deshacer.')) return;
+    try {
+      const res = await fetch(`/api/enrolar/${row.id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMsg('Enrolamiento eliminado correctamente.');
+        if (selectedEnrolar && selectedEnrolar.id === row.id) {
+          resetForm();
+        }
+        await loadEnrolarList();
+      } else {
+        setMsg(data.error || data.message || 'Error al eliminar enrolamiento');
+      }
+    } catch (err) {
+      setMsg('Error de conexión al eliminar enrolamiento');
       console.error(err);
     }
   };
@@ -616,11 +636,11 @@ export default function Enrolar({ onGoHome }) {
                         <button type="button" className="btn btn-sm btn-warning" onClick={() => handleUpdateEnrolarAction(row, 'inactivo', 0)}>
                           Inactivo
                         </button>
-                        <button type="button" className="btn btn-sm btn-danger" onClick={() => handleUpdateEnrolarAction(row, 'eliminado', 0)}>
-                          Eliminado
+                        <button type="button" className="btn btn-sm btn-primary" onClick={() => handleEditEnrolar(row)}>
+                          Editar
                         </button>
-                        <button type="button" className="btn btn-sm btn-primary" onClick={() => handleUpdateEnrolarAction(row, 'editado')}>
-                          Editado
+                        <button type="button" className="btn btn-sm btn-danger" onClick={() => handleDeleteEnrolar(row)}>
+                          Eliminar
                         </button>
                       </div>
                     </td>
