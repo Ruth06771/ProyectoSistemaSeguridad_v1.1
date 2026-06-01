@@ -7,22 +7,159 @@ import traceback
 esp_api = Blueprint('esp_api', __name__)
 
 
+def verificar_acceso_credencial(uid=None, pin=None):
+    """Verificar si un UID o PIN existe en tarjetas y si el usuario está enrolado (estado = 1)."""
+    if not uid and not pin:
+        return {
+            'permitido': False,
+            'mensaje': 'Se requiere uid o pin.',
+            'uid': uid,
+            'pin': pin,
+            'enrolado': None,
+            'tarjeta_id': None,
+            'tarjeta_uid': None,
+            'tarjeta_pin': None,
+            'credencial': None
+        }
+
+    # Limpiar UIDs (eliminar espacios en blanco)
+    if uid:
+        uid = uid.strip() if isinstance(uid, str) else uid
+    if pin:
+        pin = str(pin).strip() if pin else pin
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        is_sqlite = cur.__class__.__module__.startswith('sqlite3')
+
+        tarjeta_row = None
+        credencial = None
+        if uid:
+            if is_sqlite:
+                cur.execute('SELECT id, uid, pin FROM tarjetas WHERE uid = ? LIMIT 1', (uid,))
+            else:
+                cur.execute('SELECT id, uid, pin FROM tarjetas WHERE uid = %s LIMIT 1', (uid,))
+            tarjeta_row = cur.fetchone()
+            credencial = 'TARJETA'
+
+        if not tarjeta_row and pin:
+            if is_sqlite:
+                cur.execute('SELECT id, uid, pin FROM tarjetas WHERE pin = ? LIMIT 1', (pin,))
+            else:
+                cur.execute('SELECT id, uid, pin FROM tarjetas WHERE pin = %s LIMIT 1', (pin,))
+            tarjeta_row = cur.fetchone()
+            credencial = 'PIN'
+
+        if not tarjeta_row:
+            if not credencial:
+                credencial = 'TARJETA' if uid else 'PIN' if pin else None
+            return {
+                'permitido': False,
+                'mensaje': 'Tarjeta/PIN no encontrado.',
+                'uid': uid,
+                'pin': pin,
+                'enrolado': 0,
+                'tarjeta_id': None,
+                'tarjeta_uid': None,
+                'tarjeta_pin': None,
+                'credencial': credencial
+            }
+
+        try:
+            tarjeta_id = tarjeta_row['id']
+            tarjeta_uid = tarjeta_row['uid']
+            tarjeta_pin = tarjeta_row['pin']
+        except Exception:
+            tarjeta_id = tarjeta_row[0]
+            tarjeta_uid = tarjeta_row[1] if len(tarjeta_row) > 1 else None
+            tarjeta_pin = tarjeta_row[2] if len(tarjeta_row) > 2 else None
+
+        # Robustez en la búsqueda de enrolamiento (Usa UID limpio, mayúsculas y acepta estado = 1 o NULL)
+        enrollment_active = False
+        
+        if tarjeta_uid:
+            if is_sqlite:
+                cur.execute(
+                    'SELECT id, estado FROM enrolar WHERE UPPER(TRIM(tarjeta_uid)) = UPPER(TRIM(?)) AND (estado = 1 OR estado IS NULL) LIMIT 1',
+                    (tarjeta_uid,)
+                )
+            else:
+                cur.execute(
+                    'SELECT id, estado FROM enrolar WHERE UPPER(TRIM(tarjeta_uid)) = UPPER(TRIM(%s)) AND (estado = 1 OR estado IS NULL) LIMIT 1',
+                    (tarjeta_uid,)
+                )
+            enrolar_row = cur.fetchone()
+            if enrolar_row:
+                try:
+                    estado = enrolar_row['estado']
+                except Exception:
+                    estado = enrolar_row[1]
+                enrollment_active = (estado == 1 or estado is None)
+        
+        # Fallback por tarjeta_id si no se encuentra por UID
+        if not enrollment_active and tarjeta_id:
+            if is_sqlite:
+                cur.execute(
+                    'SELECT id, estado FROM enrolar WHERE tarjeta_id = ? AND (estado = 1 OR estado IS NULL) LIMIT 1',
+                    (tarjeta_id,)
+                )
+            else:
+                cur.execute(
+                    'SELECT id, estado FROM enrolar WHERE tarjeta_id = %s AND (estado = 1 OR estado IS NULL) LIMIT 1',
+                    (tarjeta_id,)
+                )
+            enrolar_row = cur.fetchone()
+            if enrolar_row:
+                try:
+                    estado = enrolar_row['estado']
+                except Exception:
+                    estado = enrolar_row[1]
+                enrollment_active = (estado == 1 or estado is None)
+
+        return {
+            'permitido': enrollment_active,
+            'mensaje': 'Acceso permitido: credencial válida y enrolada.' if enrollment_active else 'Credencial válida pero usuario no enrolado.',
+            'uid': tarjeta_uid,
+            'pin': tarjeta_pin,
+            'enrolado': 1 if enrollment_active else 0,
+            'tarjeta_id': tarjeta_id,
+            'tarjeta_uid': tarjeta_uid,
+            'tarjeta_pin': tarjeta_pin,
+            'credencial': credencial
+        }
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 @esp_api.route('/api/esp/access', methods=['POST'])
 def esp_access():
-    """Endpoint para que un ESP32 envíe un evento de acceso.
-    JSON esperado: {"uid": "UID123", "device": "Controladora-1", "timestamp": "2025-10-07T12:00:00Z"}
-    """
+    """Endpoint para que un ESP32 envíe un evento de acceso."""
     data = request.get_json(silent=True) or {}
     uid = data.get('uid')
+    pin = data.get('pin')
     device = data.get('device') or request.remote_addr
     ts = data.get('timestamp') or datetime.datetime.utcnow().isoformat()
+    
+    # Identificar la acción que viene del ESP32
+    esp_action = data.get('accion')
+    if not esp_action or not str(esp_action).strip():
+        esp_action = 'LECTURA'
+    else:
+        esp_action = str(esp_action).strip().upper()
 
-    # API key validation
+    # Validación de API key
     api_key = request.headers.get('X-API-Key')
     if not api_key:
         return jsonify({'success': False, 'error': 'X-API-Key header requerido'}), 401
 
-    # Validate api_key against dispositivos table (snake_case) if present, otherwise fall back to env var
     try:
         conn_check = get_connection()
         cur_check = conn_check.cursor()
@@ -30,15 +167,12 @@ def esp_access():
         dispositivos_table_exists = False
         try:
             if is_sqlite_check:
-                # check for snake_case first
                 cur_check.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='dispositivos'")
                 dispositivos_table_exists = bool(cur_check.fetchone())
                 if not dispositivos_table_exists:
-                    # fall back to PascalCase table name if present
                     cur_check.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Dispositivos'")
                     dispositivos_table_exists = bool(cur_check.fetchone())
             else:
-                # try snake_case first
                 try:
                     cur_check.execute("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'dispositivos'")
                     dispositivos_table_exists = bool(cur_check.fetchone())
@@ -52,7 +186,6 @@ def esp_access():
         if dispositivos_table_exists:
             try:
                 if is_sqlite_check:
-                    # prefer snake_case
                     try:
                         cur_check.execute('SELECT id FROM dispositivos WHERE api_key = ? AND activo = 1', (api_key,))
                         found = cur_check.fetchone()
@@ -70,7 +203,6 @@ def esp_access():
             except Exception:
                 valid_key = False
         else:
-            # fallback to environment variable
             valid_key = (api_key == os.environ.get('ESP_API_KEY'))
 
     except Exception:
@@ -88,36 +220,43 @@ def esp_access():
     if not valid_key:
         return jsonify({'success': False, 'error': 'X-API-Key inválida'}), 401
 
-    if not uid:
-        return jsonify({'success': False, 'error': 'uid requerido'}), 400
+    if not uid and not pin:
+        return jsonify({'success': False, 'error': 'uid o pin requerido'}), 400
 
+    # Ejecutamos la lógica de verificación robusta
+    access_result = verificar_acceso_credencial(uid=uid, pin=pin)
+    
     conn = None
     try:
         conn = get_connection()
         cur = conn.cursor()
-
-        # Detect placeholder for param style
         is_sqlite = cur.__class__.__module__.startswith('sqlite3')
 
-        # Check if tarjeta exists
-        if is_sqlite:
-            cur.execute('SELECT id, uid FROM tarjetas WHERE uid = ?', (uid,))
-            row = cur.fetchone()
+        if uid:
+            uid = uid.strip()
+            if is_sqlite:
+                cur.execute('SELECT id, uid FROM tarjetas WHERE uid = ? LIMIT 1', (uid,))
+            else:
+                cur.execute('SELECT id, uid FROM tarjetas WHERE uid = %s LIMIT 1', (uid,))
         else:
-            cur.execute('SELECT id, uid FROM tarjetas WHERE uid = %s', (uid,))
-            row = cur.fetchone()
+            if is_sqlite:
+                cur.execute('SELECT id, uid FROM tarjetas WHERE pin = ? LIMIT 1', (pin,))
+            else:
+                cur.execute('SELECT id, uid FROM tarjetas WHERE pin = %s LIMIT 1', (pin,))
+        row = cur.fetchone()
 
         tarjeta_id = None
+        tarjeta_uid_lookup = uid
         existed = False
         if row:
-            # sqlite row can be sqlite3.Row or a tuple depending on driver
             try:
                 tarjeta_id = row['id']
+                tarjeta_uid_lookup = row['uid']
             except Exception:
                 tarjeta_id = row[0]
+                tarjeta_uid_lookup = row[1] if len(row) > 1 else uid
             existed = True
-        else:
-            # insert tarjeta
+        elif uid:
             if is_sqlite:
                 cur.execute('INSERT INTO tarjetas (uid, fecha_registro) VALUES (?, datetime("now"))', (uid,))
                 conn.commit()
@@ -125,189 +264,117 @@ def esp_access():
             else:
                 cur.execute('INSERT INTO tarjetas (uid, fecha_registro) VALUES (%s, NOW())', (uid,))
                 conn.commit()
-                # try to fetch inserted id
-                cur.execute('SELECT id FROM tarjetas WHERE uid = %s', (uid,))
+                cur.execute('SELECT id FROM tarjetas WHERE uid = %s LIMIT 1', (uid,))
                 rid = cur.fetchone()
                 tarjeta_id = rid['id'] if isinstance(rid, dict) and 'id' in rid else (rid[0] if rid else None)
 
-        # Insert into historial_tarjetas for audit
-        descripcion = f'Acceso recibido desde {device} at {ts}'
-        if is_sqlite:
-            cur.execute('INSERT INTO historial_tarjetas (tarjeta_id, uid, nombre_completo, accion, ejecutado_por, descripcion) VALUES (?, ?, ?, ?, ?, ?)',
-                        (tarjeta_id, uid, None, 'acceso', device, descripcion))
-        else:
-            cur.execute('INSERT INTO historial_tarjetas (tarjeta_id, uid, nombre_completo, accion, ejecutado_por, descripcion) VALUES (%s, %s, %s, %s, %s, %s)',
-                        (tarjeta_id, uid, None, 'acceso', device, descripcion))
-        try:
-            conn.commit()
-        except Exception:
-            pass
-
-        # Check if tarjeta is already linked to a persona via enrolar table
+        # En este endpoint ESP, el acceso se almacena en registro_acceso y no debe irrumpir
+        # en el historial de tarjetas como una acción de tarjeta normal.
         persona_info = None
         perfil_info = None
         enrolar_id = None
+        
+        search_tarjeta_id = access_result.get('tarjeta_id')
+        search_tarjeta_uid = access_result.get('tarjeta_uid')
+        
         try:
-            if is_sqlite:
-                cur.execute('SELECT id, persona_id FROM enrolar WHERE tarjeta_uid = ? LIMIT 1', (uid,))
+            if search_tarjeta_id is not None or search_tarjeta_uid is not None:
+                if is_sqlite:
+                    cur.execute(
+                        'SELECT id, persona_id FROM enrolar WHERE (UPPER(TRIM(tarjeta_uid)) = UPPER(TRIM(?)) OR tarjeta_id = ?) AND (estado = 1 OR estado IS NULL) LIMIT 1',
+                        (search_tarjeta_uid, search_tarjeta_id)
+                    )
+                else:
+                    cur.execute(
+                        'SELECT id, persona_id FROM enrolar WHERE (UPPER(TRIM(tarjeta_uid)) = UPPER(TRIM(%s)) OR tarjeta_id = %s) AND (estado = 1 OR estado IS NULL) LIMIT 1',
+                        (search_tarjeta_uid, search_tarjeta_id)
+                    )
                 er = cur.fetchone()
-            else:
-                cur.execute('SELECT id, persona_id FROM enrolar WHERE tarjeta_uid = %s LIMIT 1', (uid,))
-                er = cur.fetchone()
-            if er:
-                try:
-                    enrolar_id = er['id'] if isinstance(er, dict) else er[0]
-                    pid = er['persona_id'] if isinstance(er, dict) else er[1]
-                except Exception:
-                    enrolar_id = er[0]
-                    pid = er[1]
-                if pid:
-                    # fetch persona
-                    if is_sqlite:
-                        cur.execute('SELECT * FROM personas WHERE id = ? LIMIT 1', (pid,))
-                        persona_row = cur.fetchone()
-                    else:
-                        cur.execute('SELECT * FROM personas WHERE id = %s LIMIT 1', (pid,))
-                        persona_row = cur.fetchone()
-                    if persona_row:
-                        try:
-                            # try dict-like access
-                            persona_info = dict(persona_row)
-                        except Exception:
-                            # tuple -> map columns roughly by fetching description
-                            cols = [c[0] for c in cur.description] if cur.description else []
-                            persona_info = {cols[i]: persona_row[i] for i in range(min(len(cols), len(persona_row)))}
-                    # attempt to fetch perfil(s)
-                    if is_sqlite:
-                        cur.execute('SELECT * FROM perfiles WHERE persona_id = ? ORDER BY fecha_creacion DESC', (pid,))
-                        perfiles = cur.fetchall()
-                    else:
-                        cur.execute('SELECT * FROM perfiles WHERE persona_id = %s ORDER BY fecha_creacion DESC', (pid,))
-                        perfiles = cur.fetchall()
-                    if perfiles:
-                        try:
-                            perfil_info = [dict(p) for p in perfiles]
-                        except Exception:
-                            cols = [c[0] for c in cur.description] if cur.description else []
-                            perfil_info = [{cols[i]: p[i] for i in range(min(len(cols), len(p)))} for p in perfiles]
-                    
-                    # Register access in registro_acceso table
-                    resultado = 'Permitido' if persona_info else 'Denegado'
-                    credencial = data.get('credencial', 'Tarjeta')  # 'Tarjeta' o 'PIN'
-                    tipo_movimiento_id = 1  # Default: Entrada (should be fetched from tipo_movimiento)
-                    
-                    # Get tipo_movimiento_id for 'Entrada'
+                
+                if er:
                     try:
+                        enrolar_id = er['id'] if isinstance(er, dict) else er[0]
+                        pid = er['persona_id'] if isinstance(er, dict) else er[1]
+                    except Exception:
+                        enrolar_id = er[0]
+                        pid = er[1]
+                    
+                    if pid:
                         if is_sqlite:
-                            cur.execute('SELECT id FROM tipo_movimiento WHERE nombre = ?', ('Entrada',))
+                            cur.execute('SELECT * FROM personas WHERE id = ? LIMIT 1', (pid,))
                         else:
-                            cur.execute('SELECT id FROM tipo_movimiento WHERE nombre = %s', ('Entrada',))
-                        tm_row = cur.fetchone()
-                        if tm_row:
-                            tipo_movimiento_id = tm_row[0] if isinstance(tm_row, (tuple, list)) else tm_row.get('id')
-                    except Exception:
-                        pass
-                    
-                    if is_sqlite:
-                        cur.execute('INSERT INTO registro_acceso (enrolar_id, tarjeta_uid, fecha_hora, tipo_movimiento_id, resultado, credencial, descripcion) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                                    (enrolar_id, uid, ts, tipo_movimiento_id, resultado, credencial, descripcion))
-                    else:
-                        cur.execute('INSERT INTO registro_acceso (enrolar_id, tarjeta_uid, fecha_hora, tipo_movimiento_id, resultado, credencial, descripcion) VALUES (%s, %s, %s, %s, %s, %s, %s)',
-                                    (enrolar_id, uid, ts, tipo_movimiento_id, resultado, credencial, descripcion))
-                    try:
-                        conn.commit()
-                    except Exception:
-                        pass
-        except Exception:
-            # non-fatal
-            traceback.print_exc()
-
-        # If tarjeta not linked and request includes persona/perfil, try to enrol automatically
-        if not persona_info:
-            incoming_persona = data.get('persona')
-            incoming_perfil = data.get('perfil')
-            if incoming_persona:
-                try:
-                    # Basic insert/update persona similar to enrolar_api behavior
-                    campos = ['nombre_completo', 'fecha_nacimiento', 'correo', 'telefono_personal', 'documento_identidad', 'sexo', 'tipo_sangre', 'rol']
-                    valores = [incoming_persona.get(c) for c in campos]
-                    placeholder = '?'
-                    if not is_sqlite:
-                        placeholder = '%s'
-                    pid = None
-                    # try match by documento_identidad
-                    if incoming_persona.get('documento_identidad'):
+                            cur.execute('SELECT * FROM personas WHERE id = %s LIMIT 1', (pid,))
+                        persona_row = cur.fetchone()
+                        if persona_row:
+                            try:
+                                persona_info = dict(persona_row)
+                            except Exception:
+                                cols = [c[0] for c in cur.description] if cur.description else []
+                                persona_info = {cols[i]: persona_row[i] for i in range(min(len(cols), len(persona_row)))}
+                        
+                        if is_sqlite:
+                            cur.execute('SELECT * FROM perfiles WHERE persona_id = ? ORDER BY fecha_creacion DESC', (pid,))
+                        else:
+                            cur.execute('SELECT * FROM perfiles WHERE persona_id = %s ORDER BY fecha_creacion DESC', (pid,))
+                        perfiles = cur.fetchall()
+                        if perfiles:
+                            try:
+                                perfil_info = [dict(p) for p in perfiles]
+                            except Exception:
+                                cols = [c[0] for c in cur.description] if cur.description else []
+                                perfil_info = [{cols[i]: p[i] for i in range(min(len(cols), len(p)))} for p in perfiles]
+                        
+                        # --- MODIFICACIÓN DEL CONTROL DE ACCESOS ---
+                        resultado = 'Permitido' if access_result['permitido'] else 'Denegado'
+                        registro_tarjeta_uid = search_tarjeta_uid or (uid if uid else None)
+                        credencial = access_result.get('credencial') or ('PIN' if pin else 'TARJETA')
+                        
+                        # Determinar el tipo de movimiento y armar la descripción exacta solicitada
+                        tipo_movimiento_id = 1
+                        tipo_movimiento_nombre = 'salida' if esp_action == 'DEVOLVER' else 'entrada'
+                        accion_legible = 'RETIRANDO' if esp_action == 'RETIRAR' else 'DEVOLVIENDO' if esp_action == 'DEVOLVER' else esp_action
+                        
+                        # Aquí agregamos la descripción clara al Control de Accesos
+                        control_acceso_descripcion = f'El usuario está {accion_legible} un equipo. (Disp: {device})'
+                        
                         try:
                             if is_sqlite:
-                                cur.execute(f"SELECT id FROM personas WHERE documento_identidad = {placeholder} LIMIT 1", (incoming_persona.get('documento_identidad'),))
+                                cur.execute('SELECT id FROM tipo_movimiento WHERE LOWER(TRIM(movimiento)) = ?', (tipo_movimiento_nombre,))
                             else:
-                                cur.execute(f"SELECT id FROM personas WHERE documento_identidad = {placeholder} LIMIT 1", (incoming_persona.get('documento_identidad'),))
-                            r = cur.fetchone()
-                            if r:
-                                pid = r[0] if isinstance(r, (list, tuple)) else (r.get('id') if hasattr(r, 'get') else None)
+                                cur.execute('SELECT id FROM tipo_movimiento WHERE LOWER(TRIM(movimiento)) = %s', (tipo_movimiento_nombre,))
+                            tm_row = cur.fetchone()
+                            if tm_row:
+                                tipo_movimiento_id = tm_row[0] if isinstance(tm_row, (tuple, list)) else tm_row.get('id')
                         except Exception:
                             pass
-                    # fallback insert
-                    if not pid:
-                        sql = f"INSERT INTO personas ({', '.join(campos)}) VALUES ({', '.join([placeholder]*len(campos))})"
+                        
+                        # Guardar el resultado del ESP en registro_acceso
+                        if is_sqlite:
+                            cur.execute('INSERT INTO registro_acceso (enrolar_id, tarjeta_uid, fecha_hora, tipo_movimiento_id, resultado, credencial, descripcion, accion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                                        (enrolar_id, registro_tarjeta_uid, ts, tipo_movimiento_id, resultado, credencial, control_acceso_descripcion, esp_action))
+                        else:
+                            cur.execute('INSERT INTO registro_acceso (enrolar_id, tarjeta_uid, fecha_hora, tipo_movimiento_id, resultado, credencial, descripcion, accion) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)',
+                                        (enrolar_id, registro_tarjeta_uid, ts, tipo_movimiento_id, resultado, credencial, control_acceso_descripcion, esp_action))
                         try:
-                            cur.execute(sql, valores)
-                            conn.commit()
-                            pid = cur.lastrowid if hasattr(cur, 'lastrowid') else None
-                            if pid:
-                                try:
-                                    log_action(conn, 'personas', entidad_id=pid, entidad_tipo='persona', accion='create', usuario=None, descripcion=f'Persona creada vía ESP32 uid={uid}')
-                                except Exception:
-                                    pass
-                        except Exception:
-                            try:
-                                conn.rollback()
-                            except Exception:
-                                pass
-                    # create perfil if provided
-                    perfil_id = None
-                    if incoming_perfil and pid:
-                        try:
-                            if is_sqlite:
-                                cur.execute('INSERT INTO perfiles (persona_id, nombre, datos) VALUES (?, ?, ?)', (pid, incoming_perfil.get('nombre'), incoming_perfil.get('datos')))
-                            else:
-                                cur.execute('INSERT INTO perfiles (persona_id, nombre, datos) VALUES (%s, %s, %s)', (pid, incoming_perfil.get('nombre'), incoming_perfil.get('datos')))
-                            perfil_id = cur.lastrowid if hasattr(cur, 'lastrowid') else None
                             conn.commit()
                         except Exception:
-                            try:
-                                conn.rollback()
-                            except Exception:
-                                pass
-                    # finally insert enrolar linking persona and tarjeta uid
-                    if pid:
-                        try:
-                            if is_sqlite:
-                                cur.execute('INSERT INTO enrolar (persona_id, tarjeta_uid, perfil_acceso_lab_id) VALUES (?, ?, ?)', (pid, uid, None))
-                            else:
-                                cur.execute('INSERT INTO enrolar (persona_id, tarjeta_uid, perfil_acceso_lab_id) VALUES (%s, %s, %s)', (pid, uid, None))
-                            conn.commit()
-                            persona_info = {}
-                            try:
-                                # fetch inserted persona
-                                if is_sqlite:
-                                    cur.execute('SELECT * FROM personas WHERE id = ? LIMIT 1', (pid,))
-                                else:
-                                    cur.execute('SELECT * FROM personas WHERE id = %s LIMIT 1', (pid,))
-                                prow = cur.fetchone()
-                                if prow:
-                                    persona_info = dict(prow) if hasattr(prow, 'keys') else {col[0]: prow[i] for i, col in enumerate(cur.description)}
-                            except Exception:
-                                pass
-                        except Exception:
-                            try:
-                                conn.rollback()
-                            except Exception:
-                                pass
-                except Exception:
-                    traceback.print_exc()
+                            pass
+        except Exception:
+            traceback.print_exc()
 
-        return jsonify({'success': True, 'uid': uid, 'tarjeta_id': tarjeta_id, 'existed': existed, 'persona': persona_info, 'perfiles': perfil_info})
+        if not access_result['permitido']:
+            persona_info = None
+            perfil_info = None
+
+        return jsonify({
+            'success': True,
+            'uid': uid,
+            'tarjeta_id': tarjeta_id,
+            'existed': existed,
+            'persona': persona_info,
+            'perfiles': perfil_info,
+            'access': access_result
+        })
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

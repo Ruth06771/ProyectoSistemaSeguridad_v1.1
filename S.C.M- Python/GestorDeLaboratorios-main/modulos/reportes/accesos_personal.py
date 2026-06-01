@@ -19,9 +19,13 @@ def accesos_personal():
         ra.id,
         ra.fecha_hora,
         COALESCE(p.nombre_completo, 'Desconocido') AS nombre_completo,
-        tm.nombre AS tipo_movimiento,
+        tm.movimiento AS tipo_movimiento,
         ra.resultado,
-        ra.credencial,
+        CASE
+            WHEN LOWER(TRIM(COALESCE(ra.credencial, 'Tarjeta'))) IN ('uid', 'tarjeta') THEN 'TARJETA'
+            WHEN LOWER(TRIM(ra.credencial)) = 'pin' THEN 'PIN'
+            ELSE UPPER(ra.credencial)
+        END AS credencial,
         ra.tarjeta_uid,
         ra.descripcion
     FROM registro_acceso ra
@@ -39,14 +43,20 @@ def accesos_personal():
         query += " AND ra.fecha_hora <= %s"
         params.append(fecha_hasta + " 23:59:59")
     if tipo_movimiento:
-        query += " AND tm.nombre = %s"
-        params.append(tipo_movimiento)
+        query += " AND LOWER(TRIM(tm.movimiento)) = %s"
+        params.append(tipo_movimiento.strip().lower())
     if resultado:
         query += " AND ra.resultado = %s"
         params.append(resultado)
     if credencial:
-        query += " AND ra.credencial = %s"
-        params.append(credencial)
+        credencial_val = credencial.strip().lower()
+        if credencial_val == 'tarjeta':
+            query += " AND LOWER(TRIM(ra.credencial)) IN ('tarjeta', 'uid')"
+        elif credencial_val == 'pin':
+            query += " AND LOWER(TRIM(ra.credencial)) = 'pin'"
+        else:
+            query += " AND LOWER(TRIM(ra.credencial)) = %s"
+            params.append(credencial_val)
     if nombre_completo:
         query += " AND p.nombre_completo LIKE %s"
         params.append(f"%{nombre_completo}%")

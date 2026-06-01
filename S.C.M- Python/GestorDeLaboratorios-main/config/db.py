@@ -301,6 +301,11 @@ def _ensure_sqlite_schema(conn):
                 cur.execute('ALTER TABLE registro_acceso ADD COLUMN enrolar_id INTEGER')
             except Exception:
                 pass
+        if 'accion' not in cols:
+            try:
+                cur.execute('ALTER TABLE registro_acceso ADD COLUMN accion TEXT')
+            except Exception:
+                pass
     except Exception:
         pass
 

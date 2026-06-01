@@ -102,11 +102,16 @@ export default function AdminDashboard({ usuario, onLogout }) {
     const url = `/api/reportes/accesos_historial${q ? `?${q}` : ''}${separator}_t=${timestamp}`;
     try {
       const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
       const data = await res.json();
       // normalize response: backend may return array or { value: [...], Count }
       const rows = Array.isArray(data) ? data : (data && data.value ? data.value : []);
+      console.log(`✅ Accesos cargados: ${rows.length} registros`, rows);
       setResultadosAccesos(rows || []);
     } catch (err) {
+      console.error('❌ Error cargando accesos:', err);
       setResultadosAccesos([]);
     }
   };
@@ -211,6 +216,16 @@ export default function AdminDashboard({ usuario, onLogout }) {
     openDownload(`/reporte_tarjetas?${q}`);
   };
 
+  const exportEnrolamientoExcel = (filtros = {}) => {
+    const q = buildQuery(filtros);
+    openDownload(`/exportar_excel_enrolamiento?${q}`);
+  };
+
+  const exportEnrolamientoPDF = (filtros = {}) => {
+    const q = buildQuery(filtros);
+    openDownload(`/reporte_enrolamiento?${q}`);
+  };
+
   let content = null;
   if (view === 'personas') content = <Personas onGoHome={() => setView('dashboard')} />;
   else if (view === 'usuarios') content = <Usuarios onGoHome={() => setView('dashboard')} />;
@@ -262,8 +277,8 @@ export default function AdminDashboard({ usuario, onLogout }) {
       onFiltrar={fetchEnrolamientos}
       resultados={resultadosEnrolamientos}
       filtros={filtrosEnrolamientos}
-      onExportExcel={(filters) => exportTarjetasExcel(filters || filtrosEnrolamientos)}
-      onExportPDF={(filters) => exportTarjetasPDF(filters || filtrosEnrolamientos)}
+      onExportExcel={(filters) => exportEnrolamientoExcel(filters || filtrosEnrolamientos)}
+      onExportPDF={(filters) => exportEnrolamientoPDF(filters || filtrosEnrolamientos)}
     />
   );
   else {
@@ -315,7 +330,7 @@ export default function AdminDashboard({ usuario, onLogout }) {
                             <tr key={idx}>
                               <td>{r.fecha_hora || r.fecha || '-'}</td>
                               <td>{r.persona || r.nombre || r.usuario_responsable || '-'}</td>
-                              <td>{r.movimiento || r.accion || r.tipo || '-'}</td>
+                              <td>{r.movimiento || r.tipo || '-'}</td>
                               <td>{r.resultado || '-'}</td>
                               <td>{r.credencial || '-'}</td>
                             </tr>

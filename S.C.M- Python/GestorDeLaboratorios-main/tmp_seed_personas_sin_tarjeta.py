@@ -163,8 +163,8 @@ def seed_personas():
         for row in rows:
             row_dict = dict(row)
             print(f"ID: {row_dict['id']} | Cédula: {row_dict['documento_identidad']} | "
-                  f"Nombre: {row_dict['nombre_completo']} | "
-                  f"Registrado por: {row_dict['usuario']}")
+                f"Nombre: {row_dict['nombre_completo']} | "
+                f"Registrado por: {row_dict['usuario']}")
         
         print("─" * 80)
         print("\n✅ Datos de prueba creados correctamente.")

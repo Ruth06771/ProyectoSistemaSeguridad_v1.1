@@ -93,7 +93,7 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
       return;
     }
     const params = new URLSearchParams(form).toString();
-    openDownload(`/reporte_tarjetas?${params}`);
+    openDownload(`/reporte_enrolamiento?${params}`);
   };
 
   const handleExportExcel = () => {
@@ -102,7 +102,7 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
       return;
     }
     const params = new URLSearchParams(form).toString();
-    openDownload(`/exportar_excel_tarjetas?${params}`);
+    openDownload(`/exportar_excel_enrolamiento?${params}`);
   };
 
   const formatEstado = value => {

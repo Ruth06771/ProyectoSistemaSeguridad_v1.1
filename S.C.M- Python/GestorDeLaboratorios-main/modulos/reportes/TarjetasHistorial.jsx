@@ -86,12 +86,11 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
   };
 
   const getAccionLabel = row => {
-    const raw = normalizeActionValue(row.accion || row.tipo || row.movimiento || row.estado || row.estatus || row.estado_tarjeta || row.estado_actual);
-    if (['alta', 'creada', 'create', 'created', 'activo', 'activated', 'activado', '1', 'true'].includes(raw)) return 'Alta';
-    if (['baja', 'inactivo', 'desactivado', 'desactivada', 'inactive', 'desactivate', '0', 'false'].includes(raw)) return 'Baja';
-    if (['editada', 'editado', 'edicion', 'edición', 'editar', 'update', 'updated', 'modificada', 'modificado'].includes(raw)) return 'Editada';
-    if (['eliminada', 'eliminado', 'eliminar', 'deleted', 'delete'].includes(raw)) return 'Eliminada';
-    if (raw) return raw.charAt(0).toUpperCase() + raw.slice(1);
+    const raw = normalizeActionValue(row.accion);
+    if (['alta', 'creada', 'activo'].includes(raw)) return 'Alta';
+    if (['baja', 'inactivo', 'desactivado'].includes(raw)) return 'Baja';
+    if (['editada', 'editado', 'edicion', 'modificada'].includes(raw)) return 'Editada';
+    if (['eliminada', 'eliminado'].includes(raw)) return 'Eliminada';
     return '-';
   };
 
@@ -118,6 +117,8 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
             <option value="">-- Todas --</option>
             <option value="alta">Alta</option>
             <option value="baja">Baja</option>
+            <option value="editada">Editada</option>
+            <option value="eliminada">Eliminada</option>
           </select>
         </div>
         <div className="col-md-2">

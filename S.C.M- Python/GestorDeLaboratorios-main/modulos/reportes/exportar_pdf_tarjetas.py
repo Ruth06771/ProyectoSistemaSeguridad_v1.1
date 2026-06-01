@@ -24,6 +24,7 @@ def reporte_tarjetas():
     fecha_desde = request.args.get('fecha_desde', '')
     fecha_hasta = request.args.get('fecha_hasta', '')
     persona = request.args.get('persona', '')
+    accion = request.args.get('accion', '')
     usuario = request.args.get('usuario', '')
     tarjeta = request.args.get('tarjeta', '')
 
@@ -32,7 +33,21 @@ def reporte_tarjetas():
     SELECT
         ht.id,
         COALESCE(t.uid, ht.uid) AS tarjeta_uid,
-        ht.accion,
+        CASE LOWER(TRIM(ht.accion))
+            WHEN 'creada' THEN 'alta'
+            WHEN 'alta' THEN 'alta'
+            WHEN 'activo' THEN 'alta'
+            WHEN 'baja' THEN 'baja'
+            WHEN 'inactivo' THEN 'baja'
+            WHEN 'desactivado' THEN 'baja'
+            WHEN 'editada' THEN 'editada'
+            WHEN 'editado' THEN 'editada'
+            WHEN 'edicion' THEN 'editada'
+            WHEN 'modificada' THEN 'editada'
+            WHEN 'eliminada' THEN 'eliminada'
+            WHEN 'eliminado' THEN 'eliminada'
+            ELSE NULL
+        END AS accion,
         ht.ejecutado_por AS responsable,
         ht.fecha_hora
     FROM historial_tarjetas ht
@@ -50,6 +65,18 @@ def reporte_tarjetas():
     if persona:
         query += " AND ht.nombre_completo LIKE %s"
         params.append(f"%{persona}%")
+    if accion:
+        accion_valor = accion.strip().lower()
+        if accion_valor in ('alta', 'creada', 'activo'):
+            query += " AND LOWER(TRIM(ht.accion)) IN ('alta', 'creada', 'activo')"
+        elif accion_valor in ('baja', 'inactivo', 'desactivado'):
+            query += " AND LOWER(TRIM(ht.accion)) IN ('baja', 'inactivo', 'desactivado')"
+        elif accion_valor in ('editada', 'editado', 'edicion', 'modificada'):
+            query += " AND LOWER(TRIM(ht.accion)) IN ('editada', 'editado', 'edicion', 'modificada')"
+        elif accion_valor in ('eliminada', 'eliminado'):
+            query += " AND LOWER(TRIM(ht.accion)) IN ('eliminada', 'eliminado')"
+        else:
+            query += " AND 1=0"
     if usuario:
         query += " AND ht.ejecutado_por LIKE %s"
         params.append(f"%{usuario}%")

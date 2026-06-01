@@ -19,6 +19,7 @@ def tarjetas_historial():
     fecha_desde = request.args.get("fecha_desde", "")
     fecha_hasta = request.args.get("fecha_hasta", "")
     tipo_accion = request.args.get("tipo_accion", "")
+    accion = request.args.get("accion", "")
     usuario_responsable = request.args.get("usuario_responsable", "")
     tarjeta = request.args.get("tarjeta", "")
 
@@ -32,8 +33,11 @@ def tarjetas_historial():
         query += " AND fecha_hora <= %s"
         params.append(f"{fecha_hasta} 23:59:59")
     if tipo_accion:
-        query += " AND accion = %s"
+        query += " AND tipo_accion = %s"
         params.append(tipo_accion)
+    if accion:
+        query += " AND accion = %s"
+        params.append(accion)
     if usuario_responsable:
         query += " AND usuario_responsable LIKE %s"
         params.append(f"%{usuario_responsable}%")
@@ -54,6 +58,7 @@ def tarjetas_historial():
                            fecha_desde=fecha_desde,
                            fecha_hasta=fecha_hasta,
                            tipo_accion=tipo_accion,
+                           accion=accion,
                            usuario_responsable=usuario_responsable,
                            tarjeta=tarjeta)
 

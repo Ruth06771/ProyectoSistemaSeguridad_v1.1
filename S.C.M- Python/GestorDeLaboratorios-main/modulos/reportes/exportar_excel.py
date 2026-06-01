@@ -127,10 +127,21 @@ def exportar_excel_accesos():
         ra.id,
         ra.fecha_hora,
         COALESCE(p.nombre_completo, 'Desconocido') AS persona,
-        tm.nombre AS movimiento,
+        CASE
+            WHEN LOWER(TRIM(tm.movimiento)) = 'entrada' THEN 'Entrada'
+            WHEN LOWER(TRIM(tm.movimiento)) = 'salida' THEN 'Salida'
+            WHEN LOWER(ra.descripcion) LIKE '%retirar%' THEN 'Entrada'
+            WHEN LOWER(ra.descripcion) LIKE '%devolver%' THEN 'Salida'
+            ELSE COALESCE(tm.movimiento, ra.descripcion, 'Desconocido')
+        END AS movimiento,
         ra.resultado,
-        ra.credencial,
+        CASE
+            WHEN LOWER(TRIM(COALESCE(ra.credencial, 'Tarjeta'))) IN ('uid', 'tarjeta') THEN 'TARJETA'
+            WHEN LOWER(TRIM(ra.credencial)) = 'pin' THEN 'PIN'
+            ELSE UPPER(ra.credencial)
+        END AS credencial,
         ra.tarjeta_uid,
+        ra.accion,
         ra.descripcion
     FROM registro_acceso ra
     LEFT JOIN enrolar e ON ra.enrolar_id = e.id
@@ -147,14 +158,20 @@ def exportar_excel_accesos():
         query += " AND ra.fecha_hora <= %s"
         params.append(f"{fecha_hasta} 23:59:59")
     if tipo_movimiento:
-        query += " AND tm.nombre = %s"
-        params.append(tipo_movimiento)
+        query += " AND LOWER(TRIM(tm.movimiento)) = %s"
+        params.append(tipo_movimiento.strip().lower())
     if resultado:
         query += " AND ra.resultado = %s"
         params.append(resultado)
     if credencial:
-        query += " AND ra.credencial = %s"
-        params.append(credencial)
+        credencial_val = credencial.strip().lower()
+        if credencial_val == 'tarjeta':
+            query += " AND LOWER(TRIM(ra.credencial)) IN ('tarjeta', 'uid')"
+        elif credencial_val == 'pin':
+            query += " AND LOWER(TRIM(ra.credencial)) = 'pin'"
+        else:
+            query += " AND LOWER(TRIM(ra.credencial)) = %s"
+            params.append(credencial_val)
     if nombre_completo:
         query += " AND p.nombre_completo LIKE %s"
         params.append(f"%{nombre_completo}%")
@@ -163,6 +180,120 @@ def exportar_excel_accesos():
         params.append(f"%{uid_tarjeta}%")
 
     query += " ORDER BY ra.fecha_hora DESC"
+
+    connection = get_connection()
+    try:
+        cursor = connection.cursor()
+        try:
+            exec_query = query
+            if connection.__class__.__module__.startswith('sqlite3'):
+                exec_query = exec_query.replace('%s', '?')
+            cursor.execute(exec_query, params)
+            resultados = cursor.fetchall()
+            if resultados:
+                if hasattr(resultados[0], 'keys'):
+                    resultados = [dict(r) for r in resultados]
+                else:
+                    cols = [c[0] for c in cursor.description] if cursor.description else []
+                    resultados = [dict(zip(cols, r)) for r in resultados]
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+    finally:
+        connection.close()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Reporte de Accesos"
+
+    headers = ['ID', 'Fecha y Hora', 'Persona', 'Movimiento', 'Acción ESP', 'Resultado', 'Credencial', 'UID Tarjeta', 'Descripción']
+    ws.append(headers)
+
+    header_font = Font(bold=True)
+    header_fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+    for cell in ws[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for row in resultados:
+        ws.append([
+            row.get('id'),
+            row.get('fecha_hora'),
+            row.get('persona'),
+            row.get('movimiento'),
+            row.get('accion') or '-',
+            row.get('resultado'),
+            row.get('credencial'),
+            row.get('tarjeta_uid'),
+            row.get('descripcion')
+        ])
+
+    for column in ws.columns:
+        max_length = max(len(str(cell.value)) if cell.value else 0 for cell in column)
+        column_letter = column[0].column_letter
+        ws.column_dimensions[column_letter].width = max_length + 2
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        download_name="reporte_accesos.xlsx",
+        as_attachment=True,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+@bp.route('/exportar_excel_enrolamiento')
+def exportar_excel_enrolamiento():
+    fecha_desde = request.args.get('fecha_desde', '')
+    fecha_hasta = request.args.get('fecha_hasta', '')
+    accion = request.args.get('accion', '')
+    responsable = request.args.get('responsable', '')
+    persona = request.args.get('persona', '')
+    tarjeta = request.args.get('tarjeta', '')
+
+    query = '''
+    SELECT
+        id,
+        enrolar_id,
+        persona_id,
+        nombre_persona,
+        perfil,
+        tarjeta_uid,
+        tarjeta_pin,
+        estado,
+        responsable,
+        descripcion,
+        fecha_hora
+    FROM historial_enrolamiento
+    WHERE 1=1
+    '''
+    params = []
+
+    if fecha_desde:
+        query += " AND fecha_hora >= %s"
+        params.append(f"{fecha_desde} 00:00:00")
+    if fecha_hasta:
+        query += " AND fecha_hora <= %s"
+        params.append(f"{fecha_hasta} 23:59:59")
+    if accion:
+        query += " AND LOWER(TRIM(estado)) = %s"
+        params.append(accion.strip().lower())
+    if responsable:
+        query += " AND LOWER(responsable) LIKE %s"
+        params.append(f"%{responsable.strip().lower()}%")
+    if persona:
+        query += " AND LOWER(nombre_persona) LIKE %s"
+        params.append(f"%{persona.strip().lower()}%")
+    if tarjeta:
+        query += " AND (LOWER(tarjeta_uid) LIKE %s OR LOWER(tarjeta_pin) LIKE %s)"
+        params.append(f"%{tarjeta.strip().lower()}%")
+        params.append(f"%{tarjeta.strip().lower()}%")
+
+    query += " ORDER BY fecha_hora DESC"
 
     connection = get_connection()
     try:
@@ -185,9 +316,9 @@ def exportar_excel_accesos():
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Reporte de Accesos"
+    ws.title = "Historial Enrolamiento"
 
-    headers = ['ID', 'Fecha y Hora', 'Persona', 'Movimiento', 'Resultado', 'Credencial', 'UID Tarjeta', 'Descripción']
+    headers = ['ID', 'Enrolar ID', 'Persona', 'Perfil', 'Tarjeta UID', 'PIN', 'Estado', 'Responsable', 'Descripción', 'Fecha y Hora']
     ws.append(headers)
 
     header_font = Font(bold=True)
@@ -199,13 +330,15 @@ def exportar_excel_accesos():
     for row in resultados:
         ws.append([
             row.get('id'),
-            row.get('fecha_hora'),
-            row.get('persona'),
-            row.get('movimiento'),
-            row.get('resultado'),
-            row.get('credencial'),
+            row.get('enrolar_id'),
+            row.get('nombre_persona'),
+            row.get('perfil'),
             row.get('tarjeta_uid'),
-            row.get('descripcion')
+            row.get('tarjeta_pin'),
+            row.get('estado'),
+            row.get('responsable'),
+            row.get('descripcion'),
+            row.get('fecha_hora')
         ])
 
     for column in ws.columns:
@@ -219,7 +352,7 @@ def exportar_excel_accesos():
 
     return send_file(
         output,
-        download_name="reporte_accesos.xlsx",
+        download_name="historial_enrolamiento.xlsx",
         as_attachment=True,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )

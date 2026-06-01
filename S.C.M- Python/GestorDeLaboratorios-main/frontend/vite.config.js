@@ -44,6 +44,16 @@ export default defineConfig({
         target: 'http://127.0.0.1:5000',
         changeOrigin: true,
         secure: false,
+      },
+      '/exportar_excel_enrolamiento': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/reporte_enrolamiento': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true,
+        secure: false,
       }
     }
   },

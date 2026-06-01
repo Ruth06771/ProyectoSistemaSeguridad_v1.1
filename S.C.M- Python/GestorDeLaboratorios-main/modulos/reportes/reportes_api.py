@@ -3,6 +3,29 @@ from config.db import get_connection
 
 reportes_api = Blueprint('reportes_api', __name__)
 
+ALLOWED_TARJETA_ACCIONES = {
+    'alta': ('alta', 'creada', 'activo'),
+    'baja': ('baja', 'inactivo', 'desactivado'),
+    'editada': ('editada', 'editado', 'edicion', 'modificada'),
+    'eliminada': ('eliminada', 'eliminado')
+}
+
+
+def normalize_tarjeta_accion(accion):
+    if not accion:
+        return None
+    raw = accion.strip().lower()
+    if raw in ALLOWED_TARJETA_ACCIONES['alta']:
+        return 'alta'
+    if raw in ALLOWED_TARJETA_ACCIONES['baja']:
+        return 'baja'
+    if raw in ALLOWED_TARJETA_ACCIONES['editada']:
+        return 'editada'
+    if raw in ALLOWED_TARJETA_ACCIONES['eliminada']:
+        return 'eliminada'
+    return None
+
+
 
 # Reporte de historial de accesos (desde registro_acceso)
 @reportes_api.route('/api/reportes/accesos_historial', methods=['GET'])
@@ -13,32 +36,49 @@ def accesos_historial():
     
     if params.get('fecha_desde'):
         filtros.append('ra.fecha_hora >= ?')
-        valores.append(params['fecha_desde'])
+        valores.append(f"{params['fecha_desde']} 00:00:00")
     if params.get('fecha_hasta'):
         filtros.append('ra.fecha_hora <= ?')
-        valores.append(params['fecha_hasta'])
-    if params.get('tipo_movimiento'):
-        filtros.append('tm.movimiento = ?')
-        valores.append(params['tipo_movimiento'])
+        valores.append(f"{params['fecha_hasta']} 23:59:59")
     if params.get('resultado'):
         filtros.append('ra.resultado = ?')
         valores.append(params['resultado'])
     if params.get('credencial'):
-        filtros.append('ra.credencial = ?')
-        valores.append(params['credencial'])
+        credencial_val = params['credencial'].strip().lower()
+        if credencial_val == 'tarjeta':
+            filtros.append("LOWER(TRIM(ra.credencial)) IN ('tarjeta', 'uid')")
+        elif credencial_val == 'pin':
+            filtros.append("LOWER(TRIM(ra.credencial)) = 'pin'")
+        else:
+            filtros.append('LOWER(TRIM(ra.credencial)) = ?')
+            valores.append(credencial_val)
+    if params.get('tipo_movimiento'):
+        filtros.append('LOWER(TRIM(tm.movimiento)) = ?')
+        valores.append(params['tipo_movimiento'].strip().lower())
     
     where = f"WHERE {' AND '.join(filtros)}" if filtros else ''
     
-    # Query que hace JOIN con enrolar y personas para obtener el nombre de quien ingresó
+    # Query: Lee de registro_acceso y hace JOIN con enrolar/personas/tipo_movimiento
     sql = f"""
     SELECT 
         ra.id,
         ra.fecha_hora,
         COALESCE(p.nombre_completo, 'Desconocido') AS persona,
-        tm.nombre AS movimiento,
-        ra.resultado,
-        ra.credencial,
+        CASE
+            WHEN LOWER(TRIM(tm.movimiento)) = 'entrada' THEN 'Entrada'
+            WHEN LOWER(TRIM(tm.movimiento)) = 'salida' THEN 'Salida'
+            WHEN LOWER(ra.descripcion) LIKE '%retirar%' THEN 'Entrada'
+            WHEN LOWER(ra.descripcion) LIKE '%devolver%' THEN 'Salida'
+            ELSE COALESCE(tm.movimiento, ra.descripcion, 'Desconocido')
+        END AS movimiento,
+        COALESCE(ra.resultado, 'Registrado') AS resultado,
+        CASE
+            WHEN LOWER(TRIM(COALESCE(ra.credencial, 'Tarjeta'))) IN ('uid', 'tarjeta') THEN 'TARJETA'
+            WHEN LOWER(TRIM(ra.credencial)) = 'pin' THEN 'PIN'
+            ELSE UPPER(ra.credencial)
+        END AS credencial,
         ra.tarjeta_uid,
+        ra.accion,
         ra.descripcion
     FROM registro_acceso ra
     LEFT JOIN enrolar e ON ra.enrolar_id = e.id
@@ -52,11 +92,7 @@ def accesos_historial():
     try:
         cursor = connection.cursor()
         try:
-            exec_sql = sql
-            if connection.__class__.__module__.startswith('sqlite3'):
-                # sqlite3 uses ? instead of %s
-                pass  # already using ? in the query
-            cursor.execute(exec_sql, valores)
+            cursor.execute(sql, valores)
             rows = cursor.fetchall()
             
             # Normalize rows into plain dicts
@@ -93,20 +129,17 @@ def tarjetas_historial():
         filtros.append('fecha_hora <= ?')
         valores.append(f"{params['fecha_hasta']} 23:59:59")
     if params.get('accion'):
-        accion_valor = params['accion'].lower().strip()
-        if accion_valor in ['alta', 'creada', 'activo']:
+        accion_valor = params['accion'].strip().lower()
+        if accion_valor in ALLOWED_TARJETA_ACCIONES['alta']:
             filtros.append("LOWER(TRIM(ht.accion)) IN ('alta', 'creada', 'activo')")
-        elif accion_valor in ['baja', 'inactivo', 'desactivado']:
+        elif accion_valor in ALLOWED_TARJETA_ACCIONES['baja']:
             filtros.append("LOWER(TRIM(ht.accion)) IN ('baja', 'inactivo', 'desactivado')")
-        elif accion_valor in ['editada', 'editado', 'edicion', 'modificada']:
+        elif accion_valor in ALLOWED_TARJETA_ACCIONES['editada']:
             filtros.append("LOWER(TRIM(ht.accion)) IN ('editada', 'editado', 'edicion', 'modificada')")
-        elif accion_valor in ['eliminada', 'eliminado']:
+        elif accion_valor in ALLOWED_TARJETA_ACCIONES['eliminada']:
             filtros.append("LOWER(TRIM(ht.accion)) IN ('eliminada', 'eliminado')")
-        elif accion_valor in ['sin cambio', 'sincambio', 'no cambio', 'nocambio']:
-            filtros.append("LOWER(TRIM(ht.accion)) IN ('sin cambio', 'sincambio', 'no cambio', 'nocambio')")
         else:
-            filtros.append("LOWER(TRIM(ht.accion)) = ?")
-            valores.append(accion_valor)
+            filtros.append('1 = 0')
     if params.get('usuario'):
         filtros.append('ht.ejecutado_por LIKE ?')
         valores.append(f"%{params['usuario']}%")

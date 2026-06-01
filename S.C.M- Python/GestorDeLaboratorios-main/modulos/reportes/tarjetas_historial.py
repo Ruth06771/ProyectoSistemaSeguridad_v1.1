@@ -18,7 +18,21 @@ def historial_tarjetas():
     SELECT
         ht.id,
         COALESCE(t.uid, ht.uid) AS tarjeta_uid,
-        ht.accion,
+        CASE LOWER(TRIM(ht.accion))
+            WHEN 'creada' THEN 'alta'
+            WHEN 'alta' THEN 'alta'
+            WHEN 'activo' THEN 'alta'
+            WHEN 'baja' THEN 'baja'
+            WHEN 'inactivo' THEN 'baja'
+            WHEN 'desactivado' THEN 'baja'
+            WHEN 'editada' THEN 'editada'
+            WHEN 'editado' THEN 'editada'
+            WHEN 'edicion' THEN 'editada'
+            WHEN 'modificada' THEN 'editada'
+            WHEN 'eliminada' THEN 'eliminada'
+            WHEN 'eliminado' THEN 'eliminada'
+            ELSE NULL
+        END AS accion,
         ht.ejecutado_por AS responsable,
         ht.fecha_hora
     FROM historial_tarjetas ht
@@ -34,8 +48,17 @@ def historial_tarjetas():
         query += " AND ht.fecha_hora <= %s"
         params.append(fecha_hasta + " 23:59:59")
     if accion:
-        query += " AND ht.accion = %s"
-        params.append(accion)
+        accion_valor = accion.strip().lower()
+        if accion_valor in ('alta', 'creada', 'activo'):
+            query += " AND LOWER(TRIM(ht.accion)) IN ('alta', 'creada', 'activo')"
+        elif accion_valor in ('baja', 'inactivo', 'desactivado'):
+            query += " AND LOWER(TRIM(ht.accion)) IN ('baja', 'inactivo', 'desactivado')"
+        elif accion_valor in ('editada', 'editado', 'edicion', 'modificada'):
+            query += " AND LOWER(TRIM(ht.accion)) IN ('editada', 'editado', 'edicion', 'modificada')"
+        elif accion_valor in ('eliminada', 'eliminado'):
+            query += " AND LOWER(TRIM(ht.accion)) IN ('eliminada', 'eliminado')"
+        else:
+            query += " AND 1=0"
     if usuario:
         query += " AND ht.ejecutado_por LIKE %s"
         params.append(f"%{usuario}%")

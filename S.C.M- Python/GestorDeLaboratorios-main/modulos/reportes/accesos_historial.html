@@ -91,6 +91,15 @@
             </select>
         </div>
         <div class="col-md-2">
+            <label for="accion" class="form-label">Acción</label>
+            <select class="form-select" id="accion" name="accion">
+                <option value="" {% if accion=='' %}selected{% endif %}>-- Todas --</option>
+                <option value="RETIRAR" {% if accion=='RETIRAR' %}selected{% endif %}>RETIRAR</option>
+                <option value="DEVOLVER" {% if accion=='DEVOLVER' %}selected{% endif %}>DEVOLVER</option>
+                <option value="LECTURA" {% if accion=='LECTURA' %}selected{% endif %}>LECTURA</option>
+            </select>
+        </div>
+        <div class="col-md-2">
             <label for="persona" class="form-label">Persona</label>
             <input type="text" class="form-control" id="persona" name="nombre_completo" value="{{ nombre_completo }}" placeholder="Nombre completo">
         </div>
@@ -113,6 +122,7 @@
                 <th>Fecha y Hora</th>
                 <th>Persona</th>
                 <th>Movimiento</th>
+                <th>Acción</th>
                 <th>Resultado</th>
                 <th>Credencial</th>
                 <th>UID Tarjeta</th>
@@ -126,13 +136,14 @@
                 <td>{{ row.fecha_hora }}</td>
                 <td>{{ row.persona or 'Desconocido' }}</td>
                 <td>{{ row.movimiento or '-' }}</td>
+                <td>{{ row.accion or '-' }}</td>
                 <td>{{ row.resultado or '-' }}</td>
                 <td>{{ row.credencial or '-' }}</td>
                 <td>{{ row.uid_tarjeta or '-' }}</td>
                 <td>{{ row.descripcion or '-' }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="8" class="text-center">No hay resultados</td></tr>
+            <tr><td colspan="9" class="text-center">No hay resultados</td></tr>
             {% endfor %}
         </tbody>
     </table>

@@ -2,7 +2,7 @@
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
-export default function AccesosHistorial({ onFiltrar, resultados = [], filtros = {}, onExportExcel, onVolver }) {
+export default function AccesosHistorial({ onFiltrar, resultados = [], filtros = {}, onExportExcel, onExportPDF, onVolver }) {
   const [form, setForm] = useState(filtros);
   const [activeFilter, setActiveFilter] = useState('');
 
@@ -127,7 +127,7 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
 
       // Definir encabezados exactos (8 columnas)
       const tableHeaders = [
-        ['ID', 'Fecha y Hora', 'Persona', 'Movimiento', 'Resultado', 'Credencial', 'UID Tarjeta', 'Descripción']
+        ['ID', 'Fecha y Hora', 'Persona', 'Movimiento', 'Acción ESP', 'Resultado', 'Credencial', 'UID Tarjeta', 'Descripción']
       ];
 
       // Mapear datos del array filteredResultados (NO del DOM) a filas del PDF
@@ -136,10 +136,11 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
         String(row.fecha_hora || '').trim(),                      // Columna 2: Fecha y Hora
         String(row.persona || 'Desconocido').trim(),              // Columna 3: Persona
         String(row.movimiento || '').trim(),                      // Columna 4: Movimiento
-        String(row.resultado || '').trim(),                       // Columna 5: Resultado
-        String(row.credencial || '').trim(),                      // Columna 6: Credencial
-        String(extractUIDFromData(row) || '').trim(),             // Columna 7: UID Tarjeta (DESDE DATA, NO DOM)
-        String(row.descripcion || '').trim()                      // Columna 8: Descripción
+        String(row.accion || '').trim(),                          // Columna 5: Acción ESP
+        String(row.resultado || '').trim(),                       // Columna 6: Resultado
+        String(row.credencial || '').trim(),                      // Columna 7: Credencial
+        String(extractUIDFromData(row) || '').trim(),             // Columna 8: UID Tarjeta (DESDE DATA, NO DOM)
+        String(row.descripcion || '').trim()                      // Columna 9: Descripción
       ]);
 
       // Generar tabla con autoTable (jsPDF-autotable)
@@ -282,8 +283,16 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
           </select>
         </div>
         <div className="col-12 d-flex gap-2">
-          <button type="button" className="btn btn-success flex-grow-1" onClick={onExportExcel}>📥 Exportar a Excel</button>
-          <button type="button" className="btn btn-danger flex-grow-1" onClick={handleExportPDF}>📄 Exportar a PDF</button>
+          <button
+            type="button"
+            className="btn btn-success flex-grow-1"
+            onClick={() => onExportExcel ? onExportExcel(form) : null}
+          >📥 Exportar a Excel</button>
+          <button
+            type="button"
+            className="btn btn-danger flex-grow-1"
+            onClick={() => onExportPDF ? onExportPDF(form) : handleExportPDF()}
+          >📄 Exportar a PDF</button>
         </div>
       </form>
 
@@ -294,6 +303,7 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
             <th>Fecha y Hora</th>
             <th>Persona</th>
             <th>Movimiento</th>
+            <th>Acción</th>
             <th>Resultado</th>
             <th>Credencial</th>
             <th>UID Tarjeta</th>
@@ -307,13 +317,14 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
               <td>{row.fecha_hora}</td>
               <td>{row.persona || 'Desconocido'}</td>
               <td>{row.movimiento || '-'}</td>
+              <td>{row.accion || '-'}</td>
               <td>{row.resultado || '-'}</td>
               <td>{row.credencial || '-'}</td>
               <td>{extractUIDFromData(row) || '-'}</td>
               <td>{row.descripcion || '-'}</td>
             </tr>
           )) : (
-            <tr><td colSpan={8} className="text-center">Sin resultados</td></tr>
+            <tr><td colSpan={9} className="text-center">Sin resultados</td></tr>
           )}
         </tbody>
       </table>
