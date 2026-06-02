@@ -21,7 +21,7 @@ export default function PersonasRegistradasSinTarjeta({ onVolver }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [form, setForm] = useState({});
-
+ 
   // Estilos incrustados para asegurar que se apliquen permanentemente
   const estilosIncrustados = `
     <style>

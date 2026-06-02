@@ -23,6 +23,29 @@ def _row_to_dict(cursor, row):
     return {cols[i]: row[i] for i in range(len(cols))}
 
 
+def _row_val(row, key, index=None):
+    """Safely get a value from a DB row that may be a tuple/list or sqlite3.Row (mapping-like).
+    Prefer named access when possible, fallback to index when available.
+    """
+    if row is None:
+        return None
+    if isinstance(row, (list, tuple)):
+        if index is None:
+            return None
+        try:
+            return row[index]
+        except Exception:
+            return None
+    # sqlite3.Row supports __getitem__ by name
+    try:
+        return row[key]
+    except Exception:
+        try:
+            return row[index] if index is not None else None
+        except Exception:
+            return None
+
+
 @enrolar_api.route('/api/perfil_acceso_lab', methods=['GET'])
 def listar_perfil_acceso_lab():
     """Devuelve una lista de perfiles de acceso a laboratorios (id, nombre, estado)."""
@@ -134,7 +157,7 @@ def enrolar_persona_tarjeta():
                     cur.execute(f"SELECT id FROM personas WHERE documento_identidad = {placeholder} LIMIT 1", (persona.get('documento_identidad'),))
                     row = cur.fetchone()
                     if row:
-                        existing_id = row[0] if isinstance(row, (list, tuple)) else (row.get('id') if hasattr(row, 'get') else None)
+                        existing_id = _row_val(row, 'id', 0)
                         update_sql = ("UPDATE personas SET nombre_completo=%s, fecha_nacimiento=%s, correo=%s, telefono_personal=%s, "
                                       "documento_identidad=%s, sexo=%s, tipo_sangre=%s, rol=%s, persona_emergencia=%s, telefono_emergencia=%s, emergencia_relacion=%s, emergencia_direccion=%s "
                                       "WHERE id=%s")
@@ -152,7 +175,7 @@ def enrolar_persona_tarjeta():
                     cur.execute(f"SELECT id FROM personas WHERE correo = {placeholder} LIMIT 1", (persona.get('correo'),))
                     row = cur.fetchone()
                     if row:
-                        existing_id = row[0] if isinstance(row, (list, tuple)) else (row.get('id') if hasattr(row, 'get') else None)
+                        existing_id = _row_val(row, 'id', 0)
                         update_sql = ("UPDATE personas SET nombre_completo=%s, fecha_nacimiento=%s, correo=%s, telefono_personal=%s, "
                                       "documento_identidad=%s, sexo=%s, tipo_sangre=%s, rol=%s, persona_emergencia=%s, telefono_emergencia=%s, emergencia_relacion=%s, emergencia_direccion=%s "
                                       "WHERE id=%s")
@@ -170,7 +193,7 @@ def enrolar_persona_tarjeta():
                     cur.execute(f"SELECT id FROM personas WHERE nombre_completo = {placeholder} LIMIT 1", (persona.get('nombre_completo'),))
                     row = cur.fetchone()
                     if row:
-                        existing_id = row[0] if isinstance(row, (list, tuple)) else (row.get('id') if hasattr(row, 'get') else None)
+                        existing_id = _row_val(row, 'id', 0)
                         update_sql = ("UPDATE personas SET nombre_completo=%s, fecha_nacimiento=%s, correo=%s, telefono_personal=%s, "
                                       "documento_identidad=%s, sexo=%s, tipo_sangre=%s, rol=%s, persona_emergencia=%s, telefono_emergencia=%s, emergencia_relacion=%s, emergencia_direccion=%s "
                                       "WHERE id=%s")
@@ -195,56 +218,36 @@ def enrolar_persona_tarjeta():
 
             # Handle tarjeta: if uid exists, use existing; otherwise insert new (including pin if provided)
             tarjeta_id = None
-            existing_tarjeta = None
-            if tarjeta.get('uid'):
-                try:
-                    cur.execute(f"SELECT id, uid, nombre_completo, correo, pin FROM tarjetas WHERE uid = {placeholder} LIMIT 1", (tarjeta.get('uid'),))
-                    existing_tarjeta = cur.fetchone()
-                    if existing_tarjeta:
-                        # sqlite Row or tuple
-                        if hasattr(existing_tarjeta, 'keys'):
-                            tarjeta_id = existing_tarjeta['id']
-                        else:
-                            tarjeta_id = existing_tarjeta[0]
-                except Exception:
-                    existing_tarjeta = None
-
-            if not tarjeta_id:
-                # insert new tarjeta; accept pin when provided
-                t_campos = ['uid', 'nombre_completo', 'correo', 'pin']
-                t_vals = [tarjeta.get(c) for c in t_campos]
-                # server-side validation for PIN if provided
-                pin_val = (tarjeta.get('pin') or '')
-                if pin_val is not None and str(pin_val).strip() != '':
-                    import re
-                    if not re.fullmatch(r"\d{8}", str(pin_val).strip()):
-                        conn.rollback()
-                        return jsonify({'error': 'invalid_pin', 'message': 'El PIN debe contener exactamente 8 dígitos'}), 400
-                    t_vals[3] = str(pin_val).strip()
-                else:
-                    t_vals[3] = None
-
-                sql_t = "INSERT INTO tarjetas (uid, nombre_completo, correo, pin) VALUES (%s, %s, %s, %s)"
-                if conn.__class__.__module__.startswith('sqlite3'):
-                    sql_t = sql_t.replace('%s', '?')
-                try:
-                    cur.execute(sql_t, t_vals)
-                    tarjeta_id = cur.lastrowid if hasattr(cur, 'lastrowid') else None
-                except sqlite3.IntegrityError as ie:
-                    # likely duplicate UID inserted concurrently — try to lookup the existing tarjeta instead of failing
-                    try:
-                        conn.rollback()
-                    except Exception:
-                        pass
-                    try:
-                        cur.execute(f"SELECT id FROM tarjetas WHERE uid = {placeholder} LIMIT 1", (tarjeta.get('uid'),))
-                        row = cur.fetchone()
-                        if row:
-                            tarjeta_id = row[0] if isinstance(row, (list, tuple)) else (row.get('id') if hasattr(row, 'get') else None)
-                        else:
-                            return jsonify({'error': 'duplicate_uid', 'message': 'El UID de la tarjeta ya existe pero no se pudo recuperar el registro'}), 400
-                    except Exception:
-                        return jsonify({'error': 'duplicate_uid', 'message': 'El UID de la tarjeta ya existe y no se pudo recuperar'}), 400
+            try:
+                if tarjeta.get('uid'):
+                    # try find existing tarjeta by UID
+                    cur.execute(f"SELECT id FROM tarjetas WHERE uid = {placeholder} LIMIT 1", (tarjeta.get('uid'),))
+                    row = cur.fetchone()
+                    if row:
+                        tarjeta_id = _row_val(row, 'id', 0)
+                    else:
+                        # insert new tarjeta
+                        sql_t = "INSERT INTO tarjetas (uid, nombre_completo, correo, pin) VALUES (%s, %s, %s, %s)"
+                        if conn.__class__.__module__.startswith('sqlite3'):
+                            sql_t = sql_t.replace('%s', '?')
+                        t_vals = [tarjeta.get('uid'), tarjeta.get('nombre_completo'), tarjeta.get('correo'), tarjeta.get('pin')]
+                        try:
+                            cur.execute(sql_t, t_vals)
+                            tarjeta_id = cur.lastrowid if hasattr(cur, 'lastrowid') else None
+                        except sqlite3.IntegrityError:
+                            try:
+                                conn.rollback()
+                            except Exception:
+                                pass
+                            try:
+                                cur.execute(f"SELECT id FROM tarjetas WHERE uid = {placeholder} LIMIT 1", (tarjeta.get('uid'),))
+                                r2 = cur.fetchone()
+                                if r2:
+                                    tarjeta_id = _row_val(r2, 'id', 0)
+                            except Exception:
+                                tarjeta_id = None
+            except Exception:
+                tarjeta_id = None
 
             # Insert enrolar record linking persona and tarjeta (uses tarjeta_uid) and track action state
             try:
@@ -391,13 +394,14 @@ def listar_enrolamientos():
             results = []
             for r in rows:
                 row = _row_to_dict(cursor, r)
+                perfil_value = row.get('perfil_nombre') or row.get('perfil_personal_nombre') or (row.get('perfil_raw') if row.get('perfil_raw') is not None else None)
                 results.append({
                     'id': row.get('enrolar_id'),
                     'persona_id': row.get('persona_id'),
                     'tarjeta_id': row.get('tarjeta_id'),
                     'tarjeta_uid': row.get('tarjeta_uid_real') or row.get('tarjeta_uid'),
                     'perfil_id': row.get('perfil_acceso_lab_id'),
-                    'perfil': row.get('perfil_nombre') or row.get('perfil_personal_nombre') or (row.get('perfil_raw') if row.get('perfil_raw') is not None else None),
+                    'perfil': perfil_value,
                     'accion': row.get('enrolar_accion'),
                     'estado': row.get('enrolar_estado'),
                     'fecha_de_registro': row.get('fecha_registro'),
@@ -428,9 +432,12 @@ def actualizar_enrolar(id):
     estado = data.get('estado')
     accion = data.get('accion')
 
+    print(f"[PUT /api/enrolar/{id}] payload:", data)
+    print(f"[PUT /api/enrolar/{id}] persona_id payload: {persona.get('id') if isinstance(persona, dict) else None}, perfil: {perfil}, estado: {estado}, accion: {accion}")
+
     connection = get_connection()
+    cursor = connection.cursor()
     try:
-        cursor = connection.cursor()
         try:
             placeholder = _sql_placeholder(connection)
             cursor.execute(_apply_placeholder('SELECT persona_id, tarjeta_id, tarjeta_uid FROM enrolar WHERE id = %s', connection), (id,))
@@ -438,9 +445,9 @@ def actualizar_enrolar(id):
             if not row:
                 return jsonify({'error': 'not_found'}), 404
 
-            persona_id = row[0] if isinstance(row, (list, tuple)) else row.get('persona_id')
-            tarjeta_id = row[1] if isinstance(row, (list, tuple)) else row.get('tarjeta_id')
-            tarjeta_uid = row[2] if isinstance(row, (list, tuple)) else row.get('tarjeta_uid')
+            persona_id = _row_val(row, 'persona_id', 0)
+            tarjeta_id = _row_val(row, 'tarjeta_id', 1)
+            tarjeta_uid = _row_val(row, 'tarjeta_uid', 2)
 
             if persona_id and persona:
                 campos = [
@@ -473,8 +480,10 @@ def actualizar_enrolar(id):
             update_fields = []
             update_values = []
             if perfil is not None:
+                perfil_id_value = perfil.get('perfil_acceso_lab_id') if isinstance(perfil, dict) else perfil
+                print(f"[PUT /api/enrolar/{id}] Updating perfil_acceso_lab_id to: {perfil_id_value} (type: {type(perfil_id_value)})")
                 update_fields.append('perfil_acceso_lab_id = %s')
-                update_values.append(perfil.get('perfil_acceso_lab_id') if isinstance(perfil, dict) else perfil)
+                update_values.append(perfil_id_value)
             if estado is not None:
                 try:
                     estado_int = int(estado)
@@ -482,7 +491,7 @@ def actualizar_enrolar(id):
                     estado_int = 1
                 update_fields.append('estado = %s')
                 update_values.append(estado_int)
-            if tarjeta.get('uid'):
+            if tarjeta and tarjeta.get('uid'):
                 update_fields.append('tarjeta_uid = %s')
                 update_values.append(tarjeta.get('uid'))
 
@@ -493,8 +502,10 @@ def actualizar_enrolar(id):
             if update_fields:
                 sql = f"UPDATE enrolar SET {', '.join(update_fields)} WHERE id = %s"
                 cursor.execute(_apply_placeholder(sql, connection), update_values + [id])
+                print(f"[PUT /api/enrolar/{id}] executed SQL: {sql} with values {update_values + [id]}")
+            else:
+                print(f"[PUT /api/enrolar/{id}] no enrolar update_fields to execute")
 
-            connection.commit()
             # Record update in enrollment history
             try:
                 hist_sql = "INSERT INTO historial_enrolamiento (enrolar_id, persona_id, nombre_persona, perfil, tarjeta_uid, tarjeta_pin, estado, responsable, descripcion) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
@@ -515,16 +526,30 @@ def actualizar_enrolar(id):
                     f"Enrolamiento actualizado id={id} accion={accion}"
                 )
                 cursor.execute(_apply_placeholder(hist_sql, connection), hist_vals)
+                print(f"[PUT /api/enrolar/{id}] historial_enrolamiento insert values: {hist_vals}")
             except Exception:
-                pass
-        finally:
+                traceback.print_exc()
+                print(f"[PUT /api/enrolar/{id}] failed to insert historial_enrolamiento")
+
+            connection.commit()
+            print(f"[PUT /api/enrolar/{id}] committed successfully")
+            return jsonify({'success': True})
+        except Exception:
+            traceback.print_exc()
             try:
-                cursor.close()
+                connection.rollback()
             except Exception:
                 pass
-        return jsonify({'success': True})
+            return jsonify({'error': 'update_failed'}), 500
     finally:
-        connection.close()
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            connection.close()
+        except Exception:
+            pass
 
 
 @enrolar_api.route('/api/enrolar/<int:id>', methods=['DELETE'])
@@ -541,21 +566,21 @@ def eliminar_enrolar(id):
             tarjeta_uid = None
             tarjeta_pin = None
             if row:
-                persona_id = row[0] if isinstance(row, (list, tuple)) else (row.get('persona_id') if hasattr(row, 'get') else None)
-                tarjeta_uid = row[1] if isinstance(row, (list, tuple)) else (row.get('tarjeta_uid') if hasattr(row, 'get') else None)
-                tarjeta_id = row[2] if isinstance(row, (list, tuple)) else (row.get('tarjeta_id') if hasattr(row, 'get') else None)
+                persona_id = _row_val(row, 'persona_id', 0)
+                tarjeta_uid = _row_val(row, 'tarjeta_uid', 1)
+                tarjeta_id = _row_val(row, 'tarjeta_id', 2)
                 # try to fetch pin from tarjetas if tarjeta_id available
                 try:
                     if tarjeta_id:
                         cursor.execute(_apply_placeholder('SELECT pin FROM tarjetas WHERE id = %s', connection), (tarjeta_id,))
                         tp = cursor.fetchone()
                         if tp:
-                            tarjeta_pin = tp[0] if isinstance(tp, (list, tuple)) else (tp.get('pin') if hasattr(tp, 'get') else None)
+                            tarjeta_pin = _row_val(tp, 'pin', 0)
                 except Exception:
                     pass
-            cursor.execute(_apply_placeholder('DELETE FROM enrolar WHERE id = %s', connection), (id,))
+            cursor.execute(_apply_placeholder('UPDATE enrolar SET estado = %s, accion = %s WHERE id = %s', connection), (0, 'eliminado', id))
             connection.commit()
-            # insert history record for deletion
+            # insert history record for logical deletion
             try:
                 hist_sql = "INSERT INTO historial_enrolamiento (enrolar_id, persona_id, nombre_persona, perfil, tarjeta_uid, tarjeta_pin, estado, responsable, descripcion) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
                 if connection.__class__.__module__.startswith('sqlite3'):
@@ -567,10 +592,10 @@ def eliminar_enrolar(id):
                         cursor.execute(_apply_placeholder('SELECT nombre_completo FROM personas WHERE id = %s', connection), (persona_id,))
                         pn = cursor.fetchone()
                         if pn:
-                            nombre_persona = pn[0] if isinstance(pn, (list, tuple)) else (pn.get('nombre_completo') if hasattr(pn, 'get') else None)
+                            nombre_persona = _row_val(pn, 'nombre_completo', 0)
                 except Exception:
                     pass
-                hist_vals = (id, persona_id, nombre_persona, None, tarjeta_uid, tarjeta_pin, 'eliminado', session.get('usuario') if session else None, f'Enrolamiento eliminado id={id}')
+                hist_vals = (id, persona_id, nombre_persona, None, tarjeta_uid, tarjeta_pin, 'eliminado', session.get('usuario') if session else None, f'Enrolamiento marcado como eliminado id={id}')
                 cursor.execute(_apply_placeholder(hist_sql, connection), hist_vals)
                 connection.commit()
             except Exception:

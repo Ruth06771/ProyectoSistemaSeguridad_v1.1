@@ -39,16 +39,47 @@ export default function Enrolar({ onGoHome }) {
   };
 
   const loadEnrolarList = async () => {
+    console.log('[loadEnrolarList] Starting to load enrolar list...');
     setTableLoading(true);
     try {
-      const res = await fetch('/api/enrolar', { credentials: 'include' });
-      if (!res.ok) return;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // Timeout de 10 segundos
+      
+      const res = await fetch('/api/enrolar', { 
+        credentials: 'include', 
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
+      if (!res.ok) {
+        console.error('Error cargando lista de enrolados', res.status, res.statusText);
+        setEnrolarList([]);
+        return;
+      }
       const data = await res.json();
-      setEnrolarList(data || []);
+      console.log('[loadEnrolarList] Fetched data:', data);
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.data)
+          ? data.data
+          : [];
+      console.log('[loadEnrolarList] Parsed list, length:', list.length);
+      if (list.length > 0) {
+        console.log('[loadEnrolarList] First row:', list[0]);
+      }
+      setEnrolarList(list);
     } catch (err) {
       console.error('Error cargando lista de enrolados', err);
+      if (err.name === 'AbortError') {
+        setMsg('⚠ La carga de la lista tardó demasiado. Intenta nuevamente.');
+      }
+      setEnrolarList([]);
+    } finally {
+      setTableLoading(false);
+      console.log('[loadEnrolarList] Table loading state set to false');
     }
-    setTableLoading(false);
   };
 
   const handleCancelEdit = () => {
@@ -132,22 +163,58 @@ export default function Enrolar({ onGoHome }) {
     // client-side validation
     if (!persona.nombre_completo || persona.nombre_completo.trim() === '') { setMsg('Nombre de persona es requerido'); return; }
     if (!tarjeta.uid || tarjeta.uid.trim() === '') { setMsg('UID de tarjeta es requerido'); return; }
-    setMsg('Enrolando...'); setLoading(true);
+    if (!perfil || !perfil.perfil_acceso_lab_id) { setMsg('Perfil es requerido'); return; }
+    setMsg('Enrolando...'); 
+    setLoading(true);
     try {
       const url = selectedEnrolar ? `/api/enrolar/${selectedEnrolar.id}` : '/api/enrolar';
       const method = selectedEnrolar ? 'PUT' : 'POST';
-      const body = { persona, tarjeta, perfil };
+      const body = { persona, tarjeta, perfil: { perfil_acceso_lab_id: perfil.perfil_acceso_lab_id, nombre: perfil.nombre } };
       if (selectedEnrolar) {
         body.estado = selectedEnrolar.estado;
         body.accion = 'editado';
       }
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), credentials: 'include' });
+      console.log(`[handleSubmit] Sending ${method} to ${url}`, body);
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include',
+        cache: 'no-store'
+      });
+      console.log(`[handleSubmit] Response status: ${res.status}`);
       const j = await res.json();
-      if (res.ok) {
+      console.log('[handleSubmit] Response data:', j);
+      
+      if (res.ok && j.success) {
         if (selectedEnrolar) {
-          setMsg('Enrolamiento actualizado correctamente.');
+          setMsg('✓ Enrolamiento actualizado correctamente.');
+          console.log('[handleSubmit] PUT successful, updating local list...');
+          const updatedRow = {
+            ...selectedEnrolar,
+            nombre_completo: persona.nombre_completo || selectedEnrolar.nombre_completo,
+            correo: persona.correo || selectedEnrolar.correo,
+            documento_identidad: persona.documento_identidad || selectedEnrolar.documento_identidad,
+            tipo_sangre: persona.tipo_sangre || selectedEnrolar.tipo_sangre,
+            tarjeta_uid: tarjeta.uid || selectedEnrolar.tarjeta_uid,
+            pin: tarjeta.pin || selectedEnrolar.pin,
+            perfil: perfil.nombre || selectedEnrolar.perfil,
+            perfil_id: perfil.perfil_acceso_lab_id || selectedEnrolar.perfil_id,
+            estado: selectedEnrolar.estado ?? 1,
+            accion: selectedEnrolar.accion || 'editado'
+          };
+          setEnrolarList(prev => prev.map((row) => (row.id === selectedEnrolar.id ? updatedRow : row)));
+          await new Promise(resolve => setTimeout(resolve, 500));
+          try {
+            await loadEnrolarList();
+            console.log('[handleSubmit] List reloaded after edit');
+          } catch (e) {
+            console.error('[handleSubmit] Error reloading list:', e);
+          }
         } else {
-          setMsg('Enrolado correctamente. IDs: ' + JSON.stringify(j));
+          // POST - nuevo enrolamiento
+          setMsg('✓ Enrolado correctamente.');
+          console.log('[handleSubmit] POST successful, adding to list...');
           const newRow = {
             id: j.enrolar_id || null,
             persona_id: j.persona_id || null,
@@ -155,6 +222,7 @@ export default function Enrolar({ onGoHome }) {
             tarjeta_uid: tarjeta.uid || '-',
             pin: tarjeta.pin || '-',
             perfil: perfil.nombre || '-',
+            perfil_id: perfil.perfil_acceso_lab_id,
             estado: 1,
             accion: 'activo',
             fecha_de_registro: new Date().toISOString().slice(0, 19).replace('T', ' '),
@@ -164,17 +232,22 @@ export default function Enrolar({ onGoHome }) {
             tipo_sangre: persona.tipo_sangre || '-'
           };
           setEnrolarList(prev => [newRow, ...prev]);
+          // Para POST, no hacemos loadEnrolarList() ya que acabamos de agregar
+          console.log('[handleSubmit] New row added to table');
         }
         resetForm();
-        await loadEnrolarList();
       } else {
-        setMsg('Error: ' + (j.message || j.error || 'unknown'));
+        const errorMsg = j.message || j.error || 'Error desconocido';
+        setMsg(`✗ Error: ${errorMsg}`);
+        console.error('[handleSubmit] API returned error:', j);
       }
     } catch (err) {
-      setMsg('Error de conexión');
-      console.error(err);
+      setMsg(`✗ Error de conexión: ${err.message}`);
+      console.error('[handleSubmit] Caught exception:', err);
+    } finally {
+      setLoading(false);
+      console.log('[handleSubmit] Loading state set to false');
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -531,17 +604,20 @@ export default function Enrolar({ onGoHome }) {
                   { id: 'docente', nombre: 'Docente' },
                   { id: 'auxiliar', nombre: 'Auxiliar' },
                   { id: 'admin', nombre: 'Administrador' }
-                ]).map((pf) => (
-                  <button key={pf.id} type="button" className="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onClick={() => { setPerfil({ nombre: pf.nombre, perfil_acceso_lab_id: pf.id }); setShowPerfiles(false); }}>
-                    <div>
-                      <strong>{pf.nombre}</strong>
-                      <div className="small text-muted">Role key: {pf.id}</div>
-                    </div>
-                    <div>
-                      <span className="badge bg-primary">Perfil</span>
-                    </div>
-                  </button>
-                ))}
+                ]).map((pf) => {
+                  const isSelected = perfil && (String(perfil.perfil_acceso_lab_id) === String(pf.id) || perfil.nombre === pf.nombre);
+                  return (
+                    <button key={pf.id} type="button" className={`list-group-item list-group-item-action d-flex justify-content-between align-items-center ${isSelected ? 'active' : ''}`} onClick={() => { setPerfil({ nombre: pf.nombre, perfil_acceso_lab_id: pf.id }); setShowPerfiles(false); }}>
+                      <div>
+                        <strong>{pf.nombre}</strong>
+                        <div className="small text-muted">Role key: {pf.id}</div>
+                      </div>
+                      <div>
+                        {isSelected ? <span className="badge bg-success">✓ Seleccionado</span> : <span className="badge bg-secondary">Perfil</span>}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
             {perfil && perfil.nombre && (

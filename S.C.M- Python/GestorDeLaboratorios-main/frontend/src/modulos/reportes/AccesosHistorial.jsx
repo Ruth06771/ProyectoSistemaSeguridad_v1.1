@@ -6,20 +6,8 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
   const [form, setForm] = useState(filtros);
   const [activeFilter, setActiveFilter] = useState('');
 
-  // Datos de ejemplo hardcodeados
-  const datosEjemplo = [
-    { id: 1, fecha_hora: '2025-05-11 08:30:00', persona: 'Juan García López', movimiento: 'Entrada', resultado: 'Permitido', credencial: 'Tarjeta', tarjeta_uid: 'UID001', descripcion: 'Acceso laboratorio' },
-    { id: 2, fecha_hora: '2025-05-11 09:15:00', persona: 'María Rodríguez', movimiento: 'Entrada', resultado: 'Permitido', credencial: 'PIN', tarjeta_uid: 'PIN001', descripcion: 'Acceso aula' },
-    { id: 3, fecha_hora: '2025-05-11 10:00:00', persona: 'Carlos López', movimiento: 'Salida', resultado: 'Permitido', credencial: 'Tarjeta', tarjeta_uid: 'UID002', descripcion: 'Salida laboratorio' },
-    { id: 4, fecha_hora: '2025-05-11 10:45:00', persona: 'Ana Martínez', movimiento: 'Entrada', resultado: 'Denegado', credencial: 'Tarjeta', tarjeta_uid: 'UID999', descripcion: 'Acceso no autorizado' },
-    { id: 5, fecha_hora: '2025-05-11 11:30:00', persona: 'Pedro Sánchez', movimiento: 'Entrada', resultado: 'Permitido', credencial: 'PIN', tarjeta_uid: 'PIN002', descripcion: 'Acceso oficina' },
-    { id: 6, fecha_hora: '2025-05-11 12:00:00', persona: 'Laura Díaz', movimiento: 'Salida', resultado: 'Permitido', credencial: 'Tarjeta', tarjeta_uid: 'UID003', descripcion: 'Salida aula' },
-    { id: 7, fecha_hora: '2025-05-11 13:15:00', persona: 'Roberto Flores', movimiento: 'Entrada', resultado: 'Permitido', credencial: 'Tarjeta', tarjeta_uid: 'UID004', descripcion: 'Acceso biblioteca' },
-    { id: 8, fecha_hora: '2025-05-11 14:00:00', persona: 'Sofía Gómez', movimiento: 'Salida', resultado: 'Permitido', credencial: 'PIN', tarjeta_uid: 'PIN003', descripcion: 'Salida oficina' }
-  ];
-
-  // Usar datos de ejemplo si resultados está vacío
-  const datosFinales = resultados && resultados.length > 0 ? resultados : datosEjemplo;
+  // Usar solo resultados dinámicos provistos por el backend
+  const datosFinales = resultados || []; 
 
   useEffect(() => {
     if (onFiltrar) onFiltrar(filtros || {});

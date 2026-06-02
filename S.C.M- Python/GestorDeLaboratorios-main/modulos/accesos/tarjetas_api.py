@@ -226,36 +226,80 @@ def editar_tarjeta(id):
             connection.close()
         return jsonify({'success': True, 'accion': accion_text})
 
-    campos = ['uid', 'nombre_completo', 'correo', 'pin', 'estado']
-    valores = [data.get(campo) for campo in campos]
-    # Server-side validation for PIN: must be exactly 8 digits
-    pin = (data.get('pin') or '')
-    if not isinstance(pin, str):
-        pin = str(pin)
-    pin = pin.strip()
-    import re
-    if not re.fullmatch(r"\d{8}", pin):
-        return jsonify({'error': 'invalid_pin', 'message': 'El PIN debe contener exactamente 8 dígitos'}), 400
-    valores[-2] = pin
-    # Handle estado: default to 1 if not provided
-    estado = data.get('estado', 1)
-    if estado not in (0, 1, '0', '1'):
-        estado = 1
-    estado = int(estado)
-    valores[-1] = estado
     connection = get_connection()
     try:
         cursor = connection.cursor()
         try:
+            placeholder = '%s'
+            if connection.__class__.__module__.startswith('sqlite3'):
+                placeholder = '?'
+            cursor.execute(f"SELECT uid, nombre_completo, correo, pin, estado FROM tarjetas WHERE id = {placeholder}", (id,))
+            tarjeta = cursor.fetchone()
+            if not tarjeta:
+                return jsonify({'error': 'Tarjeta no encontrada'}), 404
+
+            if hasattr(tarjeta, 'keys'):
+                tarjeta_dict = dict(tarjeta)
+                current_uid = tarjeta_dict.get('uid')
+                current_nombre_completo = tarjeta_dict.get('nombre_completo')
+                current_correo = tarjeta_dict.get('correo')
+                current_pin = tarjeta_dict.get('pin')
+                current_estado = tarjeta_dict.get('estado')
+            else:
+                current_uid = tarjeta[0] if len(tarjeta) > 0 else None
+                current_nombre_completo = tarjeta[1] if len(tarjeta) > 1 else None
+                current_correo = tarjeta[2] if len(tarjeta) > 2 else None
+                current_pin = tarjeta[3] if len(tarjeta) > 3 else None
+                current_estado = tarjeta[4] if len(tarjeta) > 4 else None
+
+            uid = data.get('uid', current_uid)
+            nombre_completo = data.get('nombre_completo', current_nombre_completo)
+            correo = data.get('correo', current_correo)
+
+            pin_raw = data.get('pin')
+            if pin_raw is None or pin_raw == '':
+                pin = current_pin
+            else:
+                pin = str(pin_raw).strip()
+                import re
+                if not re.fullmatch(r"\d{8}", pin):
+                    return jsonify({'error': 'invalid_pin', 'message': 'El PIN debe contener exactamente 8 dígitos'}), 400
+
+            if 'estado' in data:
+                estado = data.get('estado', current_estado)
+                if estado not in (0, 1, '0', '1'):
+                    estado = current_estado if current_estado in (0, 1, '0', '1') else 1
+                estado = int(estado)
+            else:
+                estado = current_estado if current_estado in (0, 1, '0', '1') else 1
             sql = """
                 UPDATE tarjetas SET uid=%s, nombre_completo=%s, correo=%s, pin=%s, estado=%s
                 WHERE id=%s
             """
             if connection.__class__.__module__.startswith('sqlite3'):
                 sql = sql.replace('%s', '?')
-            cursor.execute(sql, valores + [id])
-            connection.commit()
-            
+            try:
+                cursor.execute(sql, [uid, nombre_completo, correo, pin, estado, id])
+                connection.commit()
+            except Exception as e:
+                import sqlite3
+                if isinstance(e, sqlite3.IntegrityError) or 'UNIQUE constraint failed' in str(e) or 'Duplicate entry' in str(e):
+                    return jsonify({'error': 'duplicate_uid', 'message': 'El UID ya existe'}), 400
+                raise
+
+            # Sincronizar enrolar si el UID de la tarjeta cambió o si existen enrolamientos vinculados
+            try:
+                if uid is not None:
+                    sync_sql = f"""
+                        UPDATE enrolar
+                        SET tarjeta_uid = {placeholder}, tarjeta_id = {placeholder}
+                        WHERE tarjeta_id = {placeholder} OR (tarjeta_uid IS NOT NULL AND UPPER(TRIM(tarjeta_uid)) = UPPER(TRIM({placeholder})))
+                    """
+                    cursor.execute(sync_sql, (uid, id, id, current_uid or uid))
+                    connection.commit()
+            except Exception as sync_err:
+                print(f"[ERROR] No se sincronizó enrolar tras editar tarjeta: {sync_err}")
+
             # Registrar cambios en historial
             try:
                 placeholder_hist = '?' if connection.__class__.__module__.startswith('sqlite3') else '%s'
@@ -267,16 +311,16 @@ def editar_tarjeta(id):
                 usuario = session.get('usuario') if session else 'Sistema'
                 cursor.execute(sql_hist, (
                     id,
-                    str(data.get('uid') or ''),
-                    str(data.get('nombre_completo') or ''),
+                    str(uid or ''),
+                    str(nombre_completo or ''),
                     'editada',
                     usuario,
-                    f'Tarjeta editada: {data.get("nombre_completo", "")} ({data.get("uid", "")})'
+                    f'Tarjeta editada: {nombre_completo or ""} ({uid or ""})'
                 ))
                 connection.commit()
             except Exception as hist_err:
                 print(f"[ERROR] No se registró edición en historial: {hist_err}")
-            
+
             try:
                 log_action(connection, 'tarjetas', entidad_id=id, entidad_tipo='tarjeta', accion='update', usuario=session.get('usuario') if session else 'Sistema', descripcion=f"Actualizada tarjeta id={id}")
             except Exception:
