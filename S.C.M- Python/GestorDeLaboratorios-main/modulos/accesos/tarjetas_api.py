@@ -24,7 +24,7 @@ def listar_tarjetas():
     try:
         cursor = connection.cursor()
         try:
-            cursor.execute("SELECT * FROM tarjetas")
+            cursor.execute("SELECT * FROM tarjetas WHERE estado = 1")
             rows = cursor.fetchall()
             if rows and hasattr(rows[0], 'keys'):
                 tarjetas = [normalize_tarjeta(dict(r)) for r in rows]
@@ -351,12 +351,12 @@ def eliminar_tarjeta(id):
             nombre_completo = None
             if tarjeta:
                 if hasattr(tarjeta, 'keys'):
-                    uid = tarjeta.get('uid')
-                    nombre_completo = tarjeta.get('nombre_completo')
+                    uid = tarjeta['uid']
+                    nombre_completo = tarjeta['nombre_completo']
                 else:
                     uid = tarjeta[0] if len(tarjeta) > 0 else None
                     nombre_completo = tarjeta[1] if len(tarjeta) > 1 else None
-            cursor.execute(f"DELETE FROM tarjetas WHERE id = {placeholder}", params)
+            cursor.execute(f"UPDATE tarjetas SET estado = 0 WHERE id = {placeholder}", params)
             connection.commit()
             
             # Registrar en historial

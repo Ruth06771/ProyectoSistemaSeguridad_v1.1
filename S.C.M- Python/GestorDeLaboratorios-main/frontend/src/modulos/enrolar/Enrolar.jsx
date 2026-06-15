@@ -24,7 +24,6 @@ export default function Enrolar({ onGoHome }) {
   const [enrolarList, setEnrolarList] = useState([]);
   const [selectedEnrolar, setSelectedEnrolar] = useState(null);
   const [tableLoading, setTableLoading] = useState(false);
-
   const resetForm = () => {
     setPersona({ nombre_completo: '', correo: '', tipo_sangre: '', documento_identidad: '' });
     setSearchQuery('');
@@ -37,6 +36,7 @@ export default function Enrolar({ onGoHome }) {
     setPerfil({ nombre: '', perfil_acceso_lab_id: '' });
     setSelectedEnrolar(null);
   };
+  
 
   const loadEnrolarList = async () => {
     console.log('[loadEnrolarList] Starting to load enrolar list...');
@@ -65,11 +65,23 @@ export default function Enrolar({ onGoHome }) {
         : Array.isArray(data?.data)
           ? data.data
           : [];
+      // Filter out logically deleted enrolamientos (accion 'eliminado' or estado 0)
+      const filtered = list.filter(r => {
+        try {
+          const accion = (r.accion || '').toString().toLowerCase();
+          const estado = r.estado;
+          if (accion.includes('elimin')) return false;
+          if (estado === 0 || estado === '0') return false;
+          return true;
+        } catch (e) {
+          return true;
+        }
+      });
       console.log('[loadEnrolarList] Parsed list, length:', list.length);
       if (list.length > 0) {
         console.log('[loadEnrolarList] First row:', list[0]);
       }
-      setEnrolarList(list);
+      setEnrolarList(filtered);
     } catch (err) {
       console.error('Error cargando lista de enrolados', err);
       if (err.name === 'AbortError') {
@@ -112,6 +124,26 @@ export default function Enrolar({ onGoHome }) {
 
   const handleUpdateEnrolarAction = async (row, accion, estado = undefined) => {
     try {
+      // If action indicates deletion, call DELETE endpoint instead
+      if (accion === 'eliminar' || accion === 'eliminado') {
+        const confirmMsg = `¿Eliminar enrolamiento #${row.id}? Esta acción no se puede deshacer.`;
+        if (!window.confirm(confirmMsg)) return;
+        const res = await fetch(`/api/enrolar/${row.id}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setMsg('Enrolamiento eliminado correctamente.');
+          // remove locally without full reload
+          setEnrolarList(prev => prev.filter(r => r.id !== row.id));
+          if (selectedEnrolar && selectedEnrolar.id === row.id) resetForm();
+        } else {
+          setMsg(data.error || data.message || 'Error al eliminar enrolamiento');
+        }
+        return;
+      }
+
       const body = { accion };
       if (estado !== undefined) {
         body.estado = estado;

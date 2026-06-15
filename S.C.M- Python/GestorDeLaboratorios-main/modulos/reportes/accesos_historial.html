@@ -52,7 +52,6 @@
     </div>
 
     <div class="filter-toggle mb-3 d-flex flex-wrap gap-2">
-        <button type="button" id="btn-movimiento" class="btn btn-outline-primary">Movimiento</button>
         <button type="button" id="btn-resultado" class="btn btn-outline-primary">Resultado</button>
         <button type="button" id="btn-credencial" class="btn btn-outline-primary">Credencial</button>
     </div>
@@ -66,14 +65,7 @@
             <label for="fecha_hasta" class="form-label">Fecha Hasta</label>
             <input type="date" class="form-control" id="fecha_hasta" name="fecha_hasta" value="{{ fecha_hasta }}">
         </div>
-        <div class="col-md-2">
-            <label for="tipo_movimiento" class="form-label">Movimiento</label>
-            <select class="form-select" id="tipo_movimiento" name="tipo_movimiento">
-                <option value="" {% if tipo_movimiento=='' %}selected{% endif %}>-- Todos --</option>
-                <option value="Entrada" {% if tipo_movimiento=='Entrada' %}selected{% endif %}>Entrada</option>
-                <option value="Salida" {% if tipo_movimiento=='Salida' %}selected{% endif %}>Salida</option>
-            </select>
-        </div>
+        <!-- Movimiento filter removed per request -->
         <div class="col-md-2">
             <label for="resultado" class="form-label">Resultado</label>
             <select class="form-select" id="resultado" name="resultado">
@@ -135,7 +127,6 @@
                 <td>{{ row.id }}</td>
                 <td>{{ row.fecha_hora }}</td>
                 <td>{{ row.persona or 'Desconocido' }}</td>
-                <td>{{ row.movimiento or '-' }}</td>
                 <td>{{ row.accion or '-' }}</td>
                 <td>{{ row.resultado or '-' }}</td>
                 <td>{{ row.credencial or '-' }}</td>
@@ -143,7 +134,7 @@
                 <td>{{ row.descripcion or '-' }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="9" class="text-center">No hay resultados</td></tr>
+            <tr><td colspan="8" class="text-center">No hay resultados</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -151,11 +142,9 @@
 </div>
 
 <script>
-    const movimientoSelect = document.getElementById('tipo_movimiento');
     const resultadoSelect = document.getElementById('resultado');
     const credencialSelect = document.getElementById('credencial');
     const buttons = {
-        tipo_movimiento: document.getElementById('btn-movimiento'),
         resultado: document.getElementById('btn-resultado'),
         credencial: document.getElementById('btn-credencial'),
     };
@@ -167,16 +156,10 @@
     };
 
     const clearOtherSelects = selectedName => {
-        if (selectedName === 'tipo_movimiento') {
-            resultadoSelect.value = '';
-            credencialSelect.value = '';
-        }
         if (selectedName === 'resultado') {
-            movimientoSelect.value = '';
             credencialSelect.value = '';
         }
         if (selectedName === 'credencial') {
-            movimientoSelect.value = '';
             resultadoSelect.value = '';
         }
     };
@@ -186,17 +169,13 @@
         clearOtherSelects(type);
     };
 
-    movimientoSelect.addEventListener('change', () => selectFilterType('tipo_movimiento'));
     resultadoSelect.addEventListener('change', () => selectFilterType('resultado'));
     credencialSelect.addEventListener('change', () => selectFilterType('credencial'));
-
-    buttons.tipo_movimiento.addEventListener('click', () => selectFilterType('tipo_movimiento'));
     buttons.resultado.addEventListener('click', () => selectFilterType('resultado'));
     buttons.credencial.addEventListener('click', () => selectFilterType('credencial'));
 
     window.addEventListener('DOMContentLoaded', () => {
-        if (movimientoSelect.value) setActiveButton('tipo_movimiento');
-        else if (resultadoSelect.value) setActiveButton('resultado');
+        if (resultadoSelect.value) setActiveButton('resultado');
         else if (credencialSelect.value) setActiveButton('credencial');
     });
 </script>

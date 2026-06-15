@@ -50,7 +50,7 @@ def listar_personas():
     try:
         cursor = connection.cursor()
         try:
-            cursor.execute("SELECT * FROM personas")
+            cursor.execute("SELECT * FROM personas WHERE estado = 1")
             # sqlite3.Row -> dict-like; pymysql returns dicts when using DictCursor
             rows = cursor.fetchall()
             # Normalize sqlite rows to dicts
@@ -333,7 +333,8 @@ def eliminar_persona_api(id):
             params = (id,)
             if connection.__class__.__module__.startswith('sqlite3'):
                 placeholder = '?'
-            cursor.execute(f"DELETE FROM personas WHERE id = {placeholder}", params)
+            # Borrado lógico: marcar como inactivo en lugar de eliminar
+            cursor.execute(f"UPDATE personas SET estado = 0 WHERE id = {placeholder}", params)
             connection.commit()
             try:
                 log_action(connection, 'personas', entidad_id=id, entidad_tipo='persona', accion='delete', usuario=session.get('usuario') if session else None, descripcion=f"Eliminada persona id={id}")
@@ -345,8 +346,9 @@ def eliminar_persona_api(id):
             except Exception:
                 pass
         return jsonify({'success': True})
-    except Exception:
-        return jsonify({'error': 'delete_failed'}), 500
+    except Exception as e:
+        print(f"[ERROR] Delete persona failed: {e}")
+        return jsonify({'error': 'delete_failed', 'message': str(e)}), 500
     finally:
         connection.close()
 

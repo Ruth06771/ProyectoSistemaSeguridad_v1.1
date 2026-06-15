@@ -25,14 +25,14 @@ def personas_index():
                     placeholder = '?'
                 sql = f"""
                 SELECT * FROM personas
-                WHERE nombre_completo LIKE {placeholder}
+                WHERE estado = 1 AND (nombre_completo LIKE {placeholder}
                 OR documento_identidad LIKE {placeholder}
-                OR correo LIKE {placeholder}
+                OR correo LIKE {placeholder})
                 ORDER BY nombre_completo ASC
                 """
                 cursor.execute(sql, (param, param, param))
             else:
-                cursor.execute("SELECT * FROM personas ORDER BY nombre_completo ASC")
+                cursor.execute("SELECT * FROM personas WHERE estado = 1 ORDER BY nombre_completo ASC")
 
             personas = cursor.fetchall()
             # normalize sqlite rows to dicts when needed
@@ -63,12 +63,12 @@ def eliminar_persona():
     try:
         cursor = conn.cursor()
         try:
-            # adapt placeholder for sqlite vs mysql
             placeholder = '%s'
-            params = (persona_id,)
+            params = (int(persona_id),)
             if conn.__class__.__module__.startswith('sqlite3'):
                 placeholder = '?'
-            cursor.execute(f"DELETE FROM personas WHERE id={placeholder}", params)
+            # Borrado lógico
+            cursor.execute(f"UPDATE personas SET estado = 0 WHERE id={placeholder}", params)
         finally:
             try:
                 cursor.close()

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PermissionGate from '../../ui/PermissionGate';
 
 export default function ReportesIngresos({ onFiltrar, resultados = [], filtros = {}, onExportExcel, onExportPDF, onVolver }) {
   const [form, setForm] = useState(filtros);
@@ -179,23 +180,31 @@ export default function ReportesIngresos({ onFiltrar, resultados = [], filtros =
           >
             🔃 Refresh
           </button>
-          <button
-            type="button"
-            className="btn btn-success"
-            onClick={() => {
-              if (onExportExcel) {
-                onExportExcel(form);
-                return;
-              }
-              const params = new URLSearchParams(form).toString();
-              openDownload(`/exportar_excel_tarjetas?${params}`);
-            }}
-          >
-            📥 Exportar a Excel
-          </button>
-          <button type="button" className="btn btn-danger" onClick={handleExportPDF}>
-            📄 Exportar a PDF
-          </button>
+          <PermissionGate permissionKey="reportes">
+            <button
+              type="button"
+              className="btn btn-success"
+              onClick={() => {
+                if (onExportExcel) {
+                  onExportExcel(form);
+                  return;
+                }
+                const params = new URLSearchParams(form).toString();
+                openDownload(`/exportar_excel_tarjetas?${params}`);
+              }}
+            >
+              📥 Exportar a Excel
+            </button>
+          </PermissionGate>
+          <PermissionGate fallback={
+            <button type="button" className="btn btn-danger" disabled title="Sin permiso para exportar PDF">
+              📄 Exportar a PDF
+            </button>
+          } permissionKey="reportes">
+            <button type="button" className="btn btn-danger" onClick={handleExportPDF}>
+              📄 Exportar a PDF
+            </button>
+          </PermissionGate>
         </div>
       </form>
 

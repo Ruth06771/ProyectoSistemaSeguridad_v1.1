@@ -34,7 +34,8 @@ def eliminar_persona():
         params = (persona_id,)
         if conn.__class__.__module__.startswith('sqlite3'):
             placeholder = '?'
-        cursor.execute(f"DELETE FROM personas WHERE id = {placeholder}", params)
+        # Borrado lógico
+        cursor.execute(f"UPDATE personas SET estado = 0 WHERE id = {placeholder}", params)
         conn.commit()
 
         flash("Registro eliminado correctamente.", "success")

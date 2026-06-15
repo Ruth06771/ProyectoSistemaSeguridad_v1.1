@@ -50,7 +50,8 @@ def actualizar_persona(id):
 def eliminar_persona(id):
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("DELETE FROM personas WHERE id=%s", (id,))
+    # Borrado lógico
+    cur.execute("UPDATE personas SET estado = 0 WHERE id=%s", (id,))
     conn.commit()
     cur.close()
     log_action(conn, 'personas', id, 'persona', 'eliminar', 'system', f'Persona ID {id} eliminada')

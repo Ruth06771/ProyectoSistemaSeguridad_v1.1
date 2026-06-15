@@ -26,6 +26,13 @@ export default function Login({ onLoginSuccess }) {
         });
         const data = await res.json();
         if (res.ok && data.success) {
+          const permissions = data.permissions || {};
+          const permissionModules = data.permission_modules || [];
+          localStorage.setItem('permissions', JSON.stringify(permissions));
+          localStorage.setItem('permission_modules', JSON.stringify(permissionModules));
+          localStorage.setItem('rol', data.rol || '');
+          localStorage.setItem('nombre', data.nombre || '');
+          localStorage.setItem('usuario', data.usuario || '');
           if (onLoginSuccess) onLoginSuccess(data);
         } else {
           setError(data.error || 'Error de autenticación');

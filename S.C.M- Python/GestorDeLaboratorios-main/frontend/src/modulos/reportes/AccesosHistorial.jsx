@@ -113,9 +113,9 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
       const now = new Date().toLocaleString('es-ES');
       doc.text(`Generado el: ${now}`, 40, 50);
 
-      // Definir encabezados exactos (8 columnas)
+      // Definir encabezados exactos (8 columnas) - hemos removido 'Movimiento'
       const tableHeaders = [
-        ['ID', 'Fecha y Hora', 'Persona', 'Movimiento', 'Acción ESP', 'Resultado', 'Credencial', 'UID Tarjeta', 'Descripción']
+        ['ID', 'Fecha y Hora', 'Persona', 'Acción ESP', 'Resultado', 'Credencial', 'UID Tarjeta', 'Descripción']
       ];
 
       // Mapear datos del array filteredResultados (NO del DOM) a filas del PDF
@@ -123,12 +123,11 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
         String(row.id || '').trim(),                              // Columna 1: ID
         String(row.fecha_hora || '').trim(),                      // Columna 2: Fecha y Hora
         String(row.persona || 'Desconocido').trim(),              // Columna 3: Persona
-        String(row.movimiento || '').trim(),                      // Columna 4: Movimiento
-        String(row.accion || '').trim(),                          // Columna 5: Acción ESP
-        String(row.resultado || '').trim(),                       // Columna 6: Resultado
-        String(row.credencial || '').trim(),                      // Columna 7: Credencial
-        String(extractUIDFromData(row) || '').trim(),             // Columna 8: UID Tarjeta (DESDE DATA, NO DOM)
-        String(row.descripcion || '').trim()                      // Columna 9: Descripción
+        String(row.accion || '').trim(),                          // Columna 4: Acción ESP
+        String(row.resultado || '').trim(),                       // Columna 5: Resultado
+        String(row.credencial || '').trim(),                      // Columna 6: Credencial
+        String(extractUIDFromData(row) || '').trim(),             // Columna 7: UID Tarjeta (DESDE DATA, NO DOM)
+        String(row.descripcion || '').trim()                      // Columna 8: Descripción
       ]);
 
       // Generar tabla con autoTable (jsPDF-autotable)
@@ -167,7 +166,7 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
           0: { cellWidth: 35, halign: 'center' },      // ID: centrado, 35pt
           1: { cellWidth: 95, halign: 'left' },        // Fecha: izq, 95pt
           2: { cellWidth: 110, halign: 'left' },       // Persona: izq, 110pt
-          3: { cellWidth: 60, halign: 'center' },      // Movimiento: centrado, 60pt
+          3: { cellWidth: 60, halign: 'center' },      // Acción ESP: centrado, 60pt
           4: { cellWidth: 60, halign: 'center' },      // Resultado: centrado, 60pt
           5: { cellWidth: 60, halign: 'center' },      // Credencial: centrado, 60pt
           6: { cellWidth: 85, halign: 'center' },      // UID Tarjeta: CENTRADO, 85pt
@@ -287,24 +286,22 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
       <table className="table table-striped table-bordered table-hover">
         <thead className="table-dark">
           <tr>
-            <th>ID</th>
-            <th>Fecha y Hora</th>
-            <th>Persona</th>
-            <th>Movimiento</th>
-            <th>Acción</th>
-            <th>Resultado</th>
-            <th>Credencial</th>
-            <th>UID Tarjeta</th>
-            <th>Descripción</th>
-          </tr>
+              <th>ID</th>
+              <th>Fecha y Hora</th>
+              <th>Persona</th>
+              <th>Acción</th>
+              <th>Resultado</th>
+              <th>Credencial</th>
+              <th>UID Tarjeta</th>
+              <th>Descripción</th>
+            </tr>
         </thead>
         <tbody>
-          {filteredResultados.length > 0 ? filteredResultados.map((row, i) => (
+              {filteredResultados.length > 0 ? filteredResultados.map((row, i) => (
             <tr key={i}>
               <td>{row.id}</td>
               <td>{row.fecha_hora}</td>
               <td>{row.persona || 'Desconocido'}</td>
-              <td>{row.movimiento || '-'}</td>
               <td>{row.accion || '-'}</td>
               <td>{row.resultado || '-'}</td>
               <td>{row.credencial || '-'}</td>
@@ -312,7 +309,7 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
               <td>{row.descripcion || '-'}</td>
             </tr>
           )) : (
-            <tr><td colSpan={9} className="text-center">Sin resultados</td></tr>
+            <tr><td colSpan={8} className="text-center">Sin resultados</td></tr>
           )}
         </tbody>
       </table>

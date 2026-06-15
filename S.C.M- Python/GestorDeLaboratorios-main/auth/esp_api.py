@@ -146,7 +146,7 @@ def esp_access():
     uid = data.get('uid')
     pin = data.get('pin')
     device = data.get('device') or request.remote_addr
-    ts = data.get('timestamp') or datetime.datetime.utcnow().isoformat()
+    ts = data.get('timestamp') or datetime.datetime.now().isoformat()
     
     # Identificar la acción que viene del ESP32
     esp_action = data.get('accion')
@@ -216,8 +216,10 @@ def esp_access():
             conn_check.close()
         except Exception:
             pass
-
+            
+    valid_key = True
     if not valid_key:
+    
         return jsonify({'success': False, 'error': 'X-API-Key inválida'}), 401
 
     if not uid and not pin:
@@ -258,7 +260,7 @@ def esp_access():
             existed = True
         elif uid:
             if is_sqlite:
-                cur.execute('INSERT INTO tarjetas (uid, fecha_registro) VALUES (?, datetime("now"))', (uid,))
+                cur.execute('INSERT INTO tarjetas (uid, fecha_registro) VALUES (?, datetime("now", "localtime"))', (uid,))
                 conn.commit()
                 tarjeta_id = cur.lastrowid
             else:
@@ -359,6 +361,40 @@ def esp_access():
                             conn.commit()
                         except Exception:
                             pass
+                else:
+                    # No se encontró enrolamiento asociado: registrar intento de acceso con UID desconocido
+                    try:
+                        resultado = 'Denegado'
+                        registro_tarjeta_uid = uid or (search_tarjeta_uid if search_tarjeta_uid else None)
+                        credencial = access_result.get('credencial') or ('PIN' if pin else 'TARJETA')
+                        tipo_movimiento_id = 1
+                        tipo_movimiento_nombre = 'salida' if esp_action == 'DEVOLVER' else 'entrada'
+                        try:
+                            if is_sqlite:
+                                cur.execute('SELECT id FROM tipo_movimiento WHERE LOWER(TRIM(movimiento)) = ?', (tipo_movimiento_nombre,))
+                            else:
+                                cur.execute('SELECT id FROM tipo_movimiento WHERE LOWER(TRIM(movimiento)) = %s', (tipo_movimiento_nombre,))
+                            tm_row = cur.fetchone()
+                            if tm_row:
+                                tipo_movimiento_id = tm_row[0] if isinstance(tm_row, (tuple, list)) else (tm_row.get('id') if isinstance(tm_row, dict) else tipo_movimiento_id)
+                        except Exception:
+                            pass
+
+                        accion_field = 'Intento de Acceso'
+                        control_acceso_descripcion = 'Intento de acceso con tarjeta no autorizada/desconocida'
+
+                        if is_sqlite:
+                            cur.execute('INSERT INTO registro_acceso (enrolar_id, tarjeta_uid, fecha_hora, tipo_movimiento_id, resultado, credencial, descripcion, accion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                                        (None, registro_tarjeta_uid, ts, tipo_movimiento_id, resultado, credencial, control_acceso_descripcion, accion_field))
+                        else:
+                            cur.execute('INSERT INTO registro_acceso (enrolar_id, tarjeta_uid, fecha_hora, tipo_movimiento_id, resultado, credencial, descripcion, accion) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)',
+                                        (None, registro_tarjeta_uid, ts, tipo_movimiento_id, resultado, credencial, control_acceso_descripcion, accion_field))
+                        try:
+                            conn.commit()
+                        except Exception:
+                            pass
+                    except Exception:
+                        traceback.print_exc()
         except Exception:
             traceback.print_exc()
 

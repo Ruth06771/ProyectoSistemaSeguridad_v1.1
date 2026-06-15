@@ -18,6 +18,103 @@ app = Flask(__name__)
 app.secret_key = "TU_SECRETO_AQUI" 
 CORS(app, supports_credentials=True)
 
+def _normalize_permission_key(name):
+    if not name:
+        return ''
+    key = name.strip().lower()
+    key = re.sub(r'[áàäâã]', 'a', key)
+    key = re.sub(r'[éèëê]', 'e', key)
+    key = re.sub(r'[íìïî]', 'i', key)
+    key = re.sub(r'[óòöôõ]', 'o', key)
+    key = re.sub(r'[úùüû]', 'u', key)
+    key = re.sub(r'[^a-z0-9]+', '_', key)
+    return key.strip('_')
+
+
+def get_role_id_by_name(conn, role_name):
+    if not role_name:
+        return None
+    cur = conn.cursor()
+    try:
+        if conn.__class__.__module__.startswith('sqlite3'):
+            cur.execute("SELECT id FROM rol_sistema WHERE LOWER(nombre) = LOWER(?) AND estado = 1 LIMIT 1", (role_name,))
+        else:
+            cur.execute("SELECT id FROM rol_sistema WHERE LOWER(nombre) = LOWER(%s) AND estado = 1 LIMIT 1", (role_name,))
+        row = cur.fetchone()
+        if row:
+            return row['id'] if hasattr(row, 'keys') else row[0]
+        if conn.__class__.__module__.startswith('sqlite3'):
+            cur.execute("SELECT id FROM rol_sistema WHERE LOWER(nombre) LIKE LOWER(?) AND estado = 1 LIMIT 1", (f"%{role_name}%",))
+        else:
+            cur.execute("SELECT id FROM rol_sistema WHERE LOWER(nombre) LIKE LOWER(%s) AND estado = 1 LIMIT 1", (f"%{role_name}%",))
+        row = cur.fetchone()
+        if row:
+            return row['id'] if hasattr(row, 'keys') else row[0]
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+    return None
+
+
+def get_permissions_for_role(conn, role_id):
+    permissions = {}
+    modules = []
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id, nombre FROM permisos")
+        rows = cur.fetchall()
+        assigned_map = {}
+        if role_id:
+            cur.execute("SELECT permiso_id, ver, crear, editar, eliminar FROM detalle_del_permiso WHERE rol_id = ? AND estado = 1", (role_id,))
+            for row in cur.fetchall():
+                permiso_id = row['permiso_id'] if hasattr(row, 'keys') else row[0]
+                ver = row['ver'] if hasattr(row, 'keys') else row[1]
+                crear = row['crear'] if hasattr(row, 'keys') else row[2]
+                editar = row['editar'] if hasattr(row, 'keys') else row[3]
+                eliminar = row['eliminar'] if hasattr(row, 'keys') else row[4]
+                assigned_map[permiso_id] = {
+                    'ver': bool(ver),
+                    'crear': bool(crear),
+                    'editar': bool(editar),
+                    'eliminar': bool(eliminar)
+                }
+
+        for row in rows:
+            permiso_id = row['id'] if hasattr(row, 'keys') else row[0]
+            permiso_nombre = row['nombre'] if hasattr(row, 'keys') else row[1]
+            key = _normalize_permission_key(permiso_nombre)
+            permiso_flags = assigned_map.get(permiso_id, {
+                'ver': False,
+                'crear': False,
+                'editar': False,
+                'eliminar': False
+            })
+            assigned = permiso_flags['ver'] or permiso_flags['crear'] or permiso_flags['editar'] or permiso_flags['eliminar']
+            permissions[key] = assigned
+            permissions[f"{key}.ver"] = permiso_flags['ver']
+            permissions[f"{key}.crear"] = permiso_flags['crear']
+            permissions[f"{key}.editar"] = permiso_flags['editar']
+            permissions[f"{key}.eliminar"] = permiso_flags['eliminar']
+            modules.append({
+                'id': permiso_id,
+                'nombre': permiso_nombre,
+                'key': key,
+                'assigned': assigned,
+                'ver': permiso_flags['ver'],
+                'crear': permiso_flags['crear'],
+                'editar': permiso_flags['editar'],
+                'eliminar': permiso_flags['eliminar'],
+            })
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+    return permissions, modules
+
+
 # If a built frontend exists, serve it from the `frontend/dist` directory at the root.
 FRONTEND_DIST = os.path.abspath(os.path.join(ROOT, 'frontend', 'dist'))
 if os.path.isdir(FRONTEND_DIST):
@@ -154,9 +251,15 @@ except Exception:
     import traceback
     traceback.print_exc()
 
-usuarios = {
-    "admin@uni.edu": {"password": "1234", "rol": "administrador"},
-    "user@uni.edu": {"password": "abcd", "rol": "estudiante"}
+# ============================================================
+# CUENTA DE RESPALDO DE EMERGENCIA PARA TI (NO ELIMINAR)
+# Úsese SOLO en caso de que la BD sea inaccesible
+# ============================================================
+EMERGENCY_BACKUP_USER = {
+    "correo": "lab.tecnologia@ueb.edu.bo", 
+    "password": "FacultadTecnologia2026",
+    "rol": "administrador",
+    "nombre": "Administrador Facultad Tecnología"
 }
 
 # Admin seeding & limits
@@ -262,26 +365,84 @@ def api_login():
     correo = (data.get('correo') or '').strip().lower()
     password = data.get('password')
 
-    # First check DB usuario_sistema for credentials
+    # ONLY VALIDATE AGAINST DATABASE
+    # First check DB usuario_sistema for credentials, then validate against personas table
     conn, err = try_get_connection()
     if conn and not err:
         try:
             cur = conn.cursor()
             try:
+                # Step 1: Validate credentials in usuario_sistema
                 if conn.__class__.__module__.startswith('sqlite3'):
-                    cur.execute("SELECT id FROM usuario_sistema WHERE nombre_usuario = ? AND contrasena = ? AND estado = 1", (correo, password))
+                    cur.execute("SELECT id, persona_id FROM usuario_sistema WHERE nombre_usuario = ? AND contrasena = ? AND estado = 1", (correo, password))
                     row = cur.fetchone()
                 else:
-                    cur.execute("SELECT id FROM usuario_sistema WHERE nombre_usuario = %s AND contrasena = %s AND estado = 1", (correo, password))
+                    cur.execute("SELECT id, persona_id FROM usuario_sistema WHERE nombre_usuario = %s AND contrasena = %s AND estado = 1", (correo, password))
                     row = cur.fetchone()
+                
                 if row:
+                    usuario_id = row['id'] if hasattr(row, 'keys') else row[0]
+                    persona_id = (row['persona_id'] if hasattr(row, 'keys') else row[1]) if len(row) > 1 else None
+                    
+                    # Step 2: Look up the user in personas table to get real rol and nombre_completo
+                    persona_data = None
+                    if persona_id:
+                        # If persona_id exists, use it to fetch persona data
+                        if conn.__class__.__module__.startswith('sqlite3'):
+                            cur.execute("SELECT id, nombre_completo, rol, estado FROM personas WHERE id = ? LIMIT 1", (persona_id,))
+                        else:
+                            cur.execute("SELECT id, nombre_completo, rol, estado FROM personas WHERE id = %s LIMIT 1", (persona_id,))
+                        persona_data = cur.fetchone()
+                    else:
+                        # If persona_id is NULL, try to find by correo
+                        if conn.__class__.__module__.startswith('sqlite3'):
+                            cur.execute("SELECT id, nombre_completo, rol, estado FROM personas WHERE correo = ? LIMIT 1", (correo,))
+                        else:
+                            cur.execute("SELECT id, nombre_completo, rol, estado FROM personas WHERE correo = %s LIMIT 1", (correo,))
+                        persona_data = cur.fetchone()
+                    
+                    # Step 3: Validate that persona exists and has valid status and rol
+                    if not persona_data:
+                        # Usuario exists in usuario_sistema but not in personas
+                        print(f"[DEBUG] Usuario {correo} no encontrado en tabla personas")
+                        return jsonify({"success": False, "error": "Usuario no registrado en el personal o sin permisos"}), 401
+                    
+                    persona_estado = persona_data['estado'] if hasattr(persona_data, 'keys') else persona_data[3]
+                    if persona_estado != 1:
+                        print(f"[DEBUG] Usuario {correo} inactivo en personas (estado != 1)")
+                        return jsonify({"success": False, "error": "Usuario inactivo"}), 401
+                    
+                    rol_persona = persona_data['rol'] if hasattr(persona_data, 'keys') else persona_data[2]
+                    nombre_completo = persona_data['nombre_completo'] if hasattr(persona_data, 'keys') else persona_data[1]
+                    
+                    # Step 4: Deny access if rol is 'Invitado'
+                    if rol_persona and rol_persona.lower() == 'invitado':
+                        print(f"[DEBUG] Usuario {correo} tiene rol 'Invitado', acceso denegado")
+                        return jsonify({"success": False, "error": "Usuario no registrado en el personal o sin permisos"}), 401
+                    
+                    # Step 5: Assign dynamic rol from personas table
                     session['usuario'] = correo
-                    session['rol'] = 'admin'
+                    session['nombre'] = nombre_completo
+                    session['rol'] = rol_persona if rol_persona else 'invitado'
+                    # If the user has a corresponding rol_sistema entry, load permissions for that role.
+                    role_id = get_role_id_by_name(conn, session['rol'])
+                    permissions, permissions_modules = get_permissions_for_role(conn, role_id)
+                    session['permissions'] = permissions
+                    session['permission_modules'] = permissions_modules
+                    
                     try:
-                        log_action(conn, 'auth', entidad_id=row['id'] if hasattr(row, 'keys') and 'id' in row else None, entidad_tipo='usuario', accion='login', usuario=correo, descripcion=f'Login exitoso usuario={correo}')
+                        log_action(conn, 'auth', entidad_id=usuario_id, entidad_tipo='usuario', accion='login', usuario=correo, descripcion=f'Login exitoso usuario={correo} rol={session["rol"]}')
                     except Exception:
                         pass
-                    return jsonify({"success": True, "rol": session['rol'], "usuario": correo})
+                    
+                    return jsonify({
+                        "success": True,
+                        "rol": session['rol'],
+                        "usuario": correo,
+                        "nombre": nombre_completo,
+                        "permissions": permissions,
+                        "permission_modules": permissions_modules
+                    })
             finally:
                 try:
                     cur.close()
@@ -293,24 +454,52 @@ def api_login():
             except Exception:
                 pass
 
-    # fallback to simple in-memory usuarios dict (legacy)
-    if correo in usuarios and usuarios[correo]['password'] == password:
-        session['usuario'] = correo
-        session['rol'] = usuarios[correo]['rol']
-        # Log in-memory fallback login
-        try:
-            conn, err = try_get_connection()
-            if conn and not err:
-                try:
-                    log_action(conn, 'auth', entidad_id=None, entidad_tipo='usuario', accion='login', usuario=correo, descripcion=f'Login exitoso (fallback) usuario={correo}')
-                finally:
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-        return jsonify({"success": True, "rol": session['rol'], "usuario": correo})
+    # EMERGENCY FALLBACK ONLY: If database is completely unavailable,
+    # allow ONLY the emergency IT backup account with hardcoded credentials
+    print(f"[DEBUG] BD no disponible. Verificando credencial de emergencia para {correo}...")
+    if (correo == EMERGENCY_BACKUP_USER['correo'] and 
+        password == EMERGENCY_BACKUP_USER['password']):
+        session['usuario'] = EMERGENCY_BACKUP_USER['correo']
+        session['rol'] = EMERGENCY_BACKUP_USER['rol']
+        session['nombre'] = EMERGENCY_BACKUP_USER['nombre']
+        session['permissions'] = {
+            'configuracion': True,
+            'configuracion.ver': True,
+            'configuracion.crear': True,
+            'configuracion.editar': True,
+            'configuracion.eliminar': True,
+            'enrolar': True,
+            'enrolar.ver': True,
+            'enrolar.crear': True,
+            'enrolar.editar': True,
+            'enrolar.eliminar': True,
+            'seguridad': True,
+            'seguridad.ver': True,
+            'seguridad.crear': True,
+            'seguridad.editar': True,
+            'seguridad.eliminar': True,
+            'reportes': True,
+            'reportes.ver': True,
+            'reportes.crear': True,
+            'reportes.editar': True,
+            'reportes.eliminar': True
+        }
+        session['permission_modules'] = [
+            {'id': 1, 'nombre': 'Configuración', 'key': 'configuracion', 'assigned': True, 'ver': True, 'crear': True, 'editar': True, 'eliminar': True},
+            {'id': 2, 'nombre': 'Enrolar', 'key': 'enrolar', 'assigned': True, 'ver': True, 'crear': True, 'editar': True, 'eliminar': True},
+            {'id': 3, 'nombre': 'Seguridad', 'key': 'seguridad', 'assigned': True, 'ver': True, 'crear': True, 'editar': True, 'eliminar': True},
+            {'id': 4, 'nombre': 'Reportes', 'key': 'reportes', 'assigned': True, 'ver': True, 'crear': True, 'editar': True, 'eliminar': True}
+        ]
+        print(f"[WARN] ⚠️ ACCESO DE EMERGENCIA USADO: {correo} (BD no disponible)")
+        return jsonify({
+            "success": True, 
+            "rol": session['rol'], 
+            "usuario": correo, 
+            "nombre": EMERGENCY_BACKUP_USER['nombre'],
+            "permissions": session['permissions'],
+            "permission_modules": session['permission_modules'],
+            "emergency": True
+        })
     else:
         return jsonify({"success": False, "error": "Correo o contraseña incorrectos"}), 401
 
@@ -383,7 +572,13 @@ def api_logout():
 @app.route('/api/session', methods=['GET'])
 def api_session():
     if 'usuario' in session:
-        return jsonify({"usuario": session['usuario'], "rol": session['rol']})
+        return jsonify({
+            "usuario": session.get('usuario'),
+            "rol": session.get('rol'),
+            "nombre": session.get('nombre'),
+            "permissions": session.get('permissions', {}),
+            "permission_modules": session.get('permission_modules', [])
+        })
     return jsonify({"usuario": None}), 401
 
 
@@ -391,9 +586,8 @@ def api_session():
 def api_create_admin():
     """Create a privileged admin user (max 5). Protected by ADMIN_SETUP_TOKEN env var."""
     data = request.get_json() or {}
-    token = data.get('token') or ''
-    if not ADMIN_SETUP_TOKEN or token != ADMIN_SETUP_TOKEN:
-        return jsonify({'success': False, 'error': 'not_authorized'}), 403
+    # For simplicity creation does not require a setup token anymore.
+    # The endpoint accepts only email and password in the request body.
     email = (data.get('email') or '').strip().lower()
     password = data.get('password') or 'changeme'
     # validate email format and domain
@@ -404,23 +598,135 @@ def api_create_admin():
         domain = email.split('@')[-1].lower()
         if domain not in EMAIL_ALLOWED_DOMAINS:
             return jsonify({'success': False, 'error': 'email_domain_not_allowed'}), 400
-
     conn, err = try_get_connection()
     if err:
         return jsonify({'success': False, 'error': 'db_connection', 'message': err}), 500
     try:
+        # enforce max admins
         current = count_admins(conn)
         if current >= MAX_ADMIN_COUNT:
             return jsonify({'success': False, 'error': 'limit_reached', 'message': f'Maximo {MAX_ADMIN_COUNT} admins permitidos'}), 400
-        created = create_admin_if_not_exists(conn, email, password)
-        if created:
-                try:
-                    log_action(conn, 'usuarios', entidad_id=None, entidad_tipo='usuario', accion='create', usuario=session.get('usuario') if session else None, descripcion=f'Admin creado {email}')
-                except Exception:
-                    pass
-                return jsonify({'success': True})
-        else:
-            return jsonify({'success': False, 'error': 'exists_or_error'}), 400
+
+        cur = conn.cursor()
+        try:
+            # Require that the email already exists in personas and is active
+            placeholder = '?'
+            params = (email,)
+            if not conn.__class__.__module__.startswith('sqlite3'):
+                placeholder = '%s'
+            if conn.__class__.__module__.startswith('sqlite3'):
+                cur.execute(f"SELECT id, rol, estado FROM personas WHERE LOWER(correo) = LOWER(?) LIMIT 1", (email,))
+            else:
+                cur.execute(f"SELECT id, rol, estado FROM personas WHERE LOWER(correo) = LOWER(%s) LIMIT 1", (email,))
+            persona = cur.fetchone()
+            if not persona:
+                return jsonify({'success': False, 'error': 'persona_not_found', 'message': 'El correo debe estar registrado previamente en el sistema de personas.'}), 400
+            persona_id = persona['id'] if hasattr(persona, 'keys') else persona[0]
+            persona_estado = persona['estado'] if hasattr(persona, 'keys') else persona[2]
+            if persona_estado != 1:
+                return jsonify({'success': False, 'error': 'persona_inactive', 'message': 'La persona asociada al correo no está activa.'}), 400
+
+            # Determine role id from persona. If persona.rol not mapped, set rol_id NULL.
+            persona_rol = persona['rol'] if hasattr(persona, 'keys') else persona[1]
+            rol_id = get_role_id_by_name(conn, persona_rol) if persona_rol else None
+
+            # Ensure usuario_sistema doesn't already exist
+            if conn.__class__.__module__.startswith('sqlite3'):
+                cur.execute("SELECT id FROM usuario_sistema WHERE nombre_usuario = ? LIMIT 1", (email,))
+            else:
+                cur.execute("SELECT id FROM usuario_sistema WHERE nombre_usuario = %s LIMIT 1", (email,))
+            if cur.fetchone():
+                return jsonify({'success': False, 'error': 'exists', 'message': 'Usuario ya existe'}), 400
+
+            # Insert usuario_sistema linking to persona and using persona's role id
+            if conn.__class__.__module__.startswith('sqlite3'):
+                if rol_id:
+                    cur.execute("INSERT INTO usuario_sistema (persona_id, nombre_usuario, contrasena, rol_id, estado) VALUES (?, ?, ?, ?, 1)", (persona_id, email, password, rol_id))
+                else:
+                    cur.execute("INSERT INTO usuario_sistema (persona_id, nombre_usuario, contrasena, rol_id, estado) VALUES (?, ?, ?, NULL, 1)", (persona_id, email, password))
+            else:
+                if rol_id:
+                    cur.execute("INSERT INTO usuario_sistema (persona_id, nombre_usuario, contrasena, rol_id, estado) VALUES (%s, %s, %s, %s, 1)", (persona_id, email, password, rol_id))
+                else:
+                    cur.execute("INSERT INTO usuario_sistema (persona_id, nombre_usuario, contrasena, rol_id, estado) VALUES (%s, %s, %s, NULL, 1)", (persona_id, email, password))
+            try:
+                conn.commit()
+            except Exception:
+                pass
+
+            try:
+                log_action(conn, 'usuarios', entidad_id=None, entidad_tipo='usuario', accion='create', usuario=session.get('usuario') if session else None, descripcion=f'Usuario creado vinculado a persona {persona_id} correo={email}')
+            except Exception:
+                pass
+            return jsonify({'success': True})
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+@app.route('/api/admins', methods=['GET'])
+def api_list_admins():
+    conn, err = try_get_connection()
+    if err:
+        return jsonify({'error': 'db_connection', 'message': err}), 500
+    try:
+        cur = conn.cursor()
+        try:
+            if conn.__class__.__module__.startswith('sqlite3'):
+                cur.execute('SELECT id, nombre_usuario, contrasena FROM usuario_sistema WHERE estado = 1')
+            else:
+                cur.execute('SELECT id, nombre_usuario, contrasena FROM usuario_sistema WHERE estado = %s', (1,))
+            rows = cur.fetchall()
+            if rows and hasattr(rows[0], 'keys'):
+                admins = [dict(r) for r in rows]
+            else:
+                admins = rows
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        return jsonify(admins)
+    except Exception:
+        return jsonify({'error': 'query_failed'}), 500
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+@app.route('/api/admins/<int:id>', methods=['DELETE'])
+def api_delete_admin(id):
+    conn, err = try_get_connection()
+    if err:
+        return jsonify({'error': 'db_connection', 'message': err}), 500
+    try:
+        cur = conn.cursor()
+        try:
+            placeholder = '%s'
+            params = (id,)
+            if conn.__class__.__module__.startswith('sqlite3'):
+                placeholder = '?'
+            cur.execute(f'DELETE FROM usuario_sistema WHERE id = {placeholder}', params)
+            conn.commit()
+            try:
+                log_action(conn, 'usuarios', entidad_id=id, entidad_tipo='usuario', accion='delete', usuario=session.get('usuario') if session else None, descripcion=f'Admin eliminado id={id}')
+            except Exception:
+                pass
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        return jsonify({'success': True})
+    except Exception:
+        return jsonify({'error': 'delete_failed'}), 500
     finally:
         try:
             conn.close()

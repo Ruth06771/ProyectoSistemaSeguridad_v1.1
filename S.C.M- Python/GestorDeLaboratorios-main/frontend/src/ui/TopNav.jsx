@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './topnav.css';
+import PermissionGate from './PermissionGate';
 
 export default function TopNav({ usuario, onLogout, onNavigate }) {
   const [open, setOpen] = useState(null);
@@ -73,107 +74,115 @@ export default function TopNav({ usuario, onLogout, onNavigate }) {
         </button>
 
         <nav className={`menu d-flex align-items-center ${mobileOpen ? 'open' : ''}`} aria-label="Principal">
-          <div
-            className={`menu-item ${open === 'registro' ? 'open' : ''}`}
-            onMouseEnter={() => setOpen('registro')}
-            onMouseLeave={() => setOpen(null)}
-          >
-            <button
-              className={`menu-button ${open === 'registro' ? 'active' : ''}`}
-              onClick={() => toggle('registro')}
-              onFocus={() => setOpen('registro')}
-              onKeyDown={(e) => handleButtonKeyDown(e, 'registro')}
-              aria-haspopup="true"
-              aria-controls="submenu-registro"
-              aria-expanded={open === 'registro'}
+          <PermissionGate permissionKey="configuracion.ver">
+            <div
+              className={`menu-item ${open === 'registro' ? 'open' : ''}`}
+              onMouseEnter={() => setOpen('registro')}
+              onMouseLeave={() => setOpen(null)}
             >
-              Configuración ▾
-            </button>
-                {open === 'registro' && (
-                  <div id="submenu-registro" className="submenu" role="menu" onMouseEnter={() => setOpen('registro')} onMouseLeave={() => setOpen(null)}>
-                    <button role="menuitem" onClick={() => onNavigate('personas')}>Registro de persona</button>
-                    <button role="menuitem" onClick={() => onNavigate('registro_tarjeta')}>Registro de tarjeta</button>
-                    <button role="menuitem" onClick={() => onNavigate('tipo_movimiento')}>Tipo de movimiento</button>
-                    <button role="menuitem" onClick={() => onNavigate('tipo_registro')}>Tipo de registro</button>
-                    <button role="menuitem" onClick={() => onNavigate('perfil_persona')}>Perfil de persona</button>
-                  </div>
-                )}
-          </div>
+              <button
+                className={`menu-button ${open === 'registro' ? 'active' : ''}`}
+                onClick={() => toggle('registro')}
+                onFocus={() => setOpen('registro')}
+                onKeyDown={(e) => handleButtonKeyDown(e, 'registro')}
+                aria-haspopup="true"
+                aria-controls="submenu-registro"
+                aria-expanded={open === 'registro'}
+              >
+                Configuración ▾
+              </button>
+                  {open === 'registro' && (
+                    <div id="submenu-registro" className="submenu" role="menu" onMouseEnter={() => setOpen('registro')} onMouseLeave={() => setOpen(null)}>
+                      <button role="menuitem" onClick={() => onNavigate('personas')}>Registro de persona</button>
+                      <button role="menuitem" onClick={() => onNavigate('registro_tarjeta')}>Registro de tarjeta</button>
+                      <button role="menuitem" onClick={() => onNavigate('tipo_movimiento')}>Tipo de movimiento</button>
+                      <button role="menuitem" onClick={() => onNavigate('tipo_registro')}>Tipo de registro</button>
+                      <button role="menuitem" onClick={() => onNavigate('perfil_persona')}>Perfil de persona</button>
+                    </div>
+                  )}
+            </div>
+          </PermissionGate>
 
-          <div
-            className={`menu-item ${open === 'enrolar' ? 'open' : ''}`}
-            onMouseEnter={() => setOpen('enrolar')}
-            onMouseLeave={() => setOpen(null)}
-          >
-            <button
-              className={`menu-button ${open === 'enrolar' ? 'active' : ''}`}
-              onClick={() => toggle('enrolar')}
-              onFocus={() => setOpen('enrolar')}
-              onKeyDown={(e) => handleButtonKeyDown(e, 'enrolar')}
-              aria-haspopup="true"
-              aria-controls="submenu-enrolar"
-              aria-expanded={open === 'enrolar'}
+          <PermissionGate permissionKey="enrolar.ver">
+            <div
+              className={`menu-item ${open === 'enrolar' ? 'open' : ''}`}
+              onMouseEnter={() => setOpen('enrolar')}
+              onMouseLeave={() => setOpen(null)}
             >
-              Enrolar ▾
-            </button>
-            {open === 'enrolar' && (
-              <div id="submenu-enrolar" className="submenu" role="menu" onMouseEnter={() => setOpen('enrolar')} onMouseLeave={() => setOpen(null)}>
-                <button role="menuitem" onClick={() => onNavigate('enrolar')}>Enrolar</button>
-              </div>
-            )}
-          </div>
+              <button
+                className={`menu-button ${open === 'enrolar' ? 'active' : ''}`}
+                onClick={() => toggle('enrolar')}
+                onFocus={() => setOpen('enrolar')}
+                onKeyDown={(e) => handleButtonKeyDown(e, 'enrolar')}
+                aria-haspopup="true"
+                aria-controls="submenu-enrolar"
+                aria-expanded={open === 'enrolar'}
+              >
+                Enrolar ▾
+              </button>
+              {open === 'enrolar' && (
+                <div id="submenu-enrolar" className="submenu" role="menu" onMouseEnter={() => setOpen('enrolar')} onMouseLeave={() => setOpen(null)}>
+                  <button role="menuitem" onClick={() => onNavigate('enrolar')}>Enrolar</button>
+                </div>
+              )}
+            </div>
+          </PermissionGate>
 
-          <div
-            className={`menu-item ${open === 'seguridad' ? 'open' : ''}`}
-            onMouseEnter={() => setOpen('seguridad')}
-            onMouseLeave={() => setOpen(null)}
-          >
-            <button
-              className={`menu-button ${open === 'seguridad' ? 'active' : ''}`}
-              onClick={() => toggle('seguridad')}
-              onFocus={() => setOpen('seguridad')}
-              onKeyDown={(e) => handleButtonKeyDown(e, 'seguridad')}
-              aria-haspopup="true"
-              aria-controls="submenu-seguridad"
-              aria-expanded={open === 'seguridad'}
+          <PermissionGate permissionKey="seguridad.ver">
+            <div
+              className={`menu-item ${open === 'seguridad' ? 'open' : ''}`}
+              onMouseEnter={() => setOpen('seguridad')}
+              onMouseLeave={() => setOpen(null)}
             >
-              Seguridad ▾
-            </button>
-            {open === 'seguridad' && (
-              <div id="submenu-seguridad" className="submenu" role="menu" onMouseEnter={() => setOpen('seguridad')} onMouseLeave={() => setOpen(null)}>
-                <button role="menuitem" onClick={() => onNavigate('usuarios')}>Usuarios</button>
-                <button role="menuitem" onClick={() => onNavigate('permisos')}>Permisos</button>
-                <button role="menuitem" onClick={() => onNavigate('roles')}>Roles</button>
-                <button role="menuitem" onClick={() => onNavigate('bitacora')}>Bitácora</button>
-              </div>
-            )}
-          </div>
+              <button
+                className={`menu-button ${open === 'seguridad' ? 'active' : ''}`}
+                onClick={() => toggle('seguridad')}
+                onFocus={() => setOpen('seguridad')}
+                onKeyDown={(e) => handleButtonKeyDown(e, 'seguridad')}
+                aria-haspopup="true"
+                aria-controls="submenu-seguridad"
+                aria-expanded={open === 'seguridad'}
+              >
+                Seguridad ▾
+              </button>
+              {open === 'seguridad' && (
+                <div id="submenu-seguridad" className="submenu" role="menu" onMouseEnter={() => setOpen('seguridad')} onMouseLeave={() => setOpen(null)}>
+                  <button role="menuitem" onClick={() => onNavigate('usuarios')}>Usuarios</button>
+                  <button role="menuitem" onClick={() => onNavigate('permisos')}>Permisos</button>
+                  <button role="menuitem" onClick={() => onNavigate('roles')}>Roles</button>
+                  <button role="menuitem" onClick={() => onNavigate('bitacora')}>Bitácora</button>
+                </div>
+              )}
+            </div>
+          </PermissionGate>
 
-          <div
-            className={`menu-item ${open === 'reportes' ? 'open' : ''}`}
-            onMouseEnter={() => setOpen('reportes')}
-            onMouseLeave={() => setOpen(null)}
-          >
-            <button
-              className={`menu-button ${open === 'reportes' ? 'active' : ''}`}
-              onClick={() => toggle('reportes')}
-              onFocus={() => setOpen('reportes')}
-              onKeyDown={(e) => handleButtonKeyDown(e, 'reportes')}
-              aria-haspopup="true"
-              aria-controls="submenu-reportes"
-              aria-expanded={open === 'reportes'}
+          <PermissionGate permissionKey="reportes.ver">
+            <div
+              className={`menu-item ${open === 'reportes' ? 'open' : ''}`}
+              onMouseEnter={() => setOpen('reportes')}
+              onMouseLeave={() => setOpen(null)}
             >
-              Reportes ▾
-            </button>
-            {open === 'reportes' && (
-              <div id="submenu-reportes" className="submenu" role="menu" onMouseEnter={() => setOpen('reportes')} onMouseLeave={() => setOpen(null)}>
-                <button role="menuitem" onClick={() => onNavigate('reportes_ingresos')}>Historial de Registro de Tarjetas</button>
-                <button role="menuitem" onClick={() => onNavigate('personas_registradas_sin_tarjeta')}>Historial de Registro de Personas</button>
-                <button role="menuitem" onClick={() => onNavigate('tarjetas_historial')}>Historial de Enrolamiento </button>
-                <button role="menuitem" onClick={() => onNavigate('accesos_historial')}>Historial accesos</button>
-              </div>
-            )}
-          </div>
+              <button
+                className={`menu-button ${open === 'reportes' ? 'active' : ''}`}
+                onClick={() => toggle('reportes')}
+                onFocus={() => setOpen('reportes')}
+                onKeyDown={(e) => handleButtonKeyDown(e, 'reportes')}
+                aria-haspopup="true"
+                aria-controls="submenu-reportes"
+                aria-expanded={open === 'reportes'}
+              >
+                Reportes ▾
+              </button>
+              {open === 'reportes' && (
+                <div id="submenu-reportes" className="submenu" role="menu" onMouseEnter={() => setOpen('reportes')} onMouseLeave={() => setOpen(null)}>
+                  <button role="menuitem" onClick={() => onNavigate('reportes_ingresos')}>Historial de Registro de Tarjetas</button>
+                  <button role="menuitem" onClick={() => onNavigate('personas_registradas_sin_tarjeta')}>Historial de Registro de Personas</button>
+                  <button role="menuitem" onClick={() => onNavigate('tarjetas_historial')}>Historial de Enrolamiento </button>
+                  <button role="menuitem" onClick={() => onNavigate('accesos_historial')}>Historial accesos</button>
+                </div>
+              )}
+            </div>
+          </PermissionGate>
 
           <div className="user-actions d-flex align-items-center ms-3">
             <div className="user-name me-3">{usuario}</div>

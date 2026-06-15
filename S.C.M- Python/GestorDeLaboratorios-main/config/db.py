@@ -100,11 +100,42 @@ def _ensure_sqlite_schema(conn):
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         permiso_id INTEGER,
         estado INTEGER DEFAULT 1,
+        ver INTEGER DEFAULT 1,
+        crear INTEGER DEFAULT 1,
+        editar INTEGER DEFAULT 1,
+        eliminar INTEGER DEFAULT 1,
         rol_id INTEGER,
         FOREIGN KEY(permiso_id) REFERENCES permisos(id),
         FOREIGN KEY(rol_id) REFERENCES rol_sistema(id)
     )
     ''')
+
+    # Ensure detalle_del_permiso has action columns for existing DBs
+    try:
+        cur.execute("PRAGMA table_info(detalle_del_permiso)")
+        cols = [r['name'] for r in cur.fetchall()]
+        if 'ver' not in cols:
+            try:
+                cur.execute('ALTER TABLE detalle_del_permiso ADD COLUMN ver INTEGER DEFAULT 1')
+            except Exception:
+                pass
+        if 'crear' not in cols:
+            try:
+                cur.execute('ALTER TABLE detalle_del_permiso ADD COLUMN crear INTEGER DEFAULT 1')
+            except Exception:
+                pass
+        if 'editar' not in cols:
+            try:
+                cur.execute('ALTER TABLE detalle_del_permiso ADD COLUMN editar INTEGER DEFAULT 1')
+            except Exception:
+                pass
+        if 'eliminar' not in cols:
+            try:
+                cur.execute('ALTER TABLE detalle_del_permiso ADD COLUMN eliminar INTEGER DEFAULT 1')
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     # perfil acceso
     cur.execute('''

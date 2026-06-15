@@ -227,8 +227,9 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
             const estadoRaw = enrolar?.estado ?? row.estado ?? row.accion ?? row.tipo ?? row.estado_tarjeta ?? row.estado_actual ?? '-';
             const estado = formatEstado(estadoRaw);
             const accion = getAccionLabel(row);
+            // Do not apply a different background for 'Eliminada' actions; keep table row styling uniform
             const isDeleted = normalizeActionValue(estadoRaw) === 'eliminado' || normalizeActionValue(accion) === 'eliminada';
-            const rowClassName = isDeleted ? 'table-danger text-muted' : '';
+            const rowClassName = '';
             const responsable = row.responsable || row.ejecutado_por || 'Sistema';
             const fecha = row.fecha_hora || row.fecha_de_registro || enrolar?.fecha_de_registro || '-';
             return (

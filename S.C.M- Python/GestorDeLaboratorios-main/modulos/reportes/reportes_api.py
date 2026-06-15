@@ -63,7 +63,11 @@ def accesos_historial():
     SELECT 
         ra.id,
         ra.fecha_hora,
-        COALESCE(p.nombre_completo, 'Desconocido') AS persona,
+        CASE
+            WHEN p.nombre_completo IS NOT NULL THEN p.nombre_completo
+            WHEN ra.enrolar_id IS NULL THEN 'Usuario No Registrado'
+            ELSE 'Desconocido'
+        END AS persona,
         CASE
             WHEN LOWER(TRIM(tm.movimiento)) = 'entrada' THEN 'Entrada'
             WHEN LOWER(TRIM(tm.movimiento)) = 'salida' THEN 'Salida'
