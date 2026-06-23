@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from config.db import get_connection
 import traceback
 
@@ -15,14 +15,25 @@ def try_get_connection():
 
 @usuarios_api.route('/api/usuarios', methods=['GET'])
 def listar_usuarios():
-    """Devuelve lista de personas con campos básicos y rol."""
+    """Devuelve lista de personas con campos básicos y rol.
+    Filtra por personas activos para sincronización correcta con eliminaciones."""
+    permissions = session.get('permissions', {})
+    if not permissions.get('administracion.ver', False):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
     connection, err = try_get_connection()
     if err:
         return jsonify({'error': 'db_connection', 'message': err}), 500
     try:
         cursor = connection.cursor()
         try:
-            cursor.execute("SELECT id, nombre_completo, correo, rol FROM personas")
+            # Selecciona SOLO personas con estado = 1 para sincronización correcta
+            # Excluye personas que tengan usuario_sistema asociado con estado = 0
+            sql = ("SELECT DISTINCT p.id, p.nombre_completo, p.correo, p.rol "
+                   "FROM personas p "
+                   "WHERE p.estado = 1 "
+                   "ORDER BY p.nombre_completo")
+            cursor.execute(sql)
             rows = cursor.fetchall()
             if rows and hasattr(rows[0], 'keys'):
                 usuarios = [dict(r) for r in rows]
@@ -43,6 +54,10 @@ def listar_usuarios():
 
 @usuarios_api.route('/api/usuarios/<int:id>/rol', methods=['PUT'])
 def actualizar_rol(id):
+    permissions = session.get('permissions', {})
+    if not permissions.get('administracion.editar', False):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
     data = request.get_json() or {}
     rol = data.get('rol')
     allowed = ('administrador', 'docente', 'estudiante', 'auxiliar', 'invitado')

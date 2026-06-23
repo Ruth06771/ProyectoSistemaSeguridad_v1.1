@@ -31,6 +31,10 @@ def _normalize_permission_key(name):
     return key.strip('_')
 
 
+def _has_permission(permission_key):
+    return session.get('permissions', {}).get(permission_key, False)
+
+
 def get_role_id_by_name(conn, role_name):
     if not role_name:
         return None
@@ -482,13 +486,19 @@ def api_login():
             'reportes.ver': True,
             'reportes.crear': True,
             'reportes.editar': True,
-            'reportes.eliminar': True
+            'reportes.eliminar': True,
+            'administracion': True,
+            'administracion.ver': True,
+            'administracion.crear': True,
+            'administracion.editar': True,
+            'administracion.eliminar': True
         }
         session['permission_modules'] = [
             {'id': 1, 'nombre': 'Configuración', 'key': 'configuracion', 'assigned': True, 'ver': True, 'crear': True, 'editar': True, 'eliminar': True},
             {'id': 2, 'nombre': 'Enrolar', 'key': 'enrolar', 'assigned': True, 'ver': True, 'crear': True, 'editar': True, 'eliminar': True},
             {'id': 3, 'nombre': 'Seguridad', 'key': 'seguridad', 'assigned': True, 'ver': True, 'crear': True, 'editar': True, 'eliminar': True},
-            {'id': 4, 'nombre': 'Reportes', 'key': 'reportes', 'assigned': True, 'ver': True, 'crear': True, 'editar': True, 'eliminar': True}
+            {'id': 4, 'nombre': 'Reportes', 'key': 'reportes', 'assigned': True, 'ver': True, 'crear': True, 'editar': True, 'eliminar': True},
+            {'id': 5, 'nombre': 'Administración', 'key': 'administracion', 'assigned': True, 'ver': True, 'crear': True, 'editar': True, 'eliminar': True}
         ]
         print(f"[WARN] ⚠️ ACCESO DE EMERGENCIA USADO: {correo} (BD no disponible)")
         return jsonify({
@@ -585,6 +595,9 @@ def api_session():
 @app.route('/api/admins/create', methods=['POST'])
 def api_create_admin():
     """Create a privileged admin user (max 5). Protected by ADMIN_SETUP_TOKEN env var."""
+    if not _has_permission('administracion.crear'):
+        return jsonify({'success': False, 'error': 'forbidden', 'message': 'Acceso denegado: permiso de creación requerido.'}), 403
+
     data = request.get_json() or {}
     # For simplicity creation does not require a setup token anymore.
     # The endpoint accepts only email and password in the request body.
@@ -615,9 +628,15 @@ def api_create_admin():
             if not conn.__class__.__module__.startswith('sqlite3'):
                 placeholder = '%s'
             if conn.__class__.__module__.startswith('sqlite3'):
-                cur.execute(f"SELECT id, rol, estado FROM personas WHERE LOWER(correo) = LOWER(?) LIMIT 1", (email,))
+                cur.execute(
+                    "SELECT id, rol, estado FROM personas WHERE LOWER(correo) = LOWER(?) AND estado = 1 ORDER BY id DESC LIMIT 1",
+                    (email,)
+                )
             else:
-                cur.execute(f"SELECT id, rol, estado FROM personas WHERE LOWER(correo) = LOWER(%s) LIMIT 1", (email,))
+                cur.execute(
+                    "SELECT id, rol, estado FROM personas WHERE LOWER(correo) = LOWER(%s) AND estado = 1 ORDER BY id DESC LIMIT 1",
+                    (email,)
+                )
             persona = cur.fetchone()
             if not persona:
                 return jsonify({'success': False, 'error': 'persona_not_found', 'message': 'El correo debe estar registrado previamente en el sistema de personas.'}), 400
@@ -672,6 +691,9 @@ def api_create_admin():
 
 @app.route('/api/admins', methods=['GET'])
 def api_list_admins():
+    if not _has_permission('administracion.ver'):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
     conn, err = try_get_connection()
     if err:
         return jsonify({'error': 'db_connection', 'message': err}), 500
@@ -703,6 +725,9 @@ def api_list_admins():
 
 @app.route('/api/admins/<int:id>', methods=['DELETE'])
 def api_delete_admin(id):
+    if not _has_permission('administracion.eliminar'):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
     conn, err = try_get_connection()
     if err:
         return jsonify({'error': 'db_connection', 'message': err}), 500

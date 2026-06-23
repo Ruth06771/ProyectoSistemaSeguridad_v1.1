@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from config.db import get_connection, log_action
 import traceback
 
@@ -9,6 +9,10 @@ def _placeholder_for(conn):
     return '?' if conn.__class__.__module__.startswith('sqlite3') else '%s'
 
 
+def _has_permission(permission_key):
+    return session.get('permissions', {}).get(permission_key, False)
+
+
 # ============================================================
 # ENDPOINTS DE ROLES (usando tabla rol_sistema)
 # ============================================================
@@ -16,6 +20,9 @@ def _placeholder_for(conn):
 @roles_api.route('/api/roles', methods=['GET'])
 def listar_roles():
     """Listar todos los roles del sistema"""
+    if not _has_permission('administracion.ver'):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
     conn = get_connection()
     try:
         cur = conn.cursor()
@@ -42,6 +49,71 @@ def listar_roles():
             pass
 
 
+@roles_api.route('/api/roles', methods=['POST'])
+def crear_rol():
+    """Crear un rol nuevo."""
+    if not _has_permission('administracion.crear'):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
+    data = request.get_json() or {}
+    nombre = (data.get('nombre') or '').strip()
+    descripcion = (data.get('descripcion') or '').strip()
+    if not nombre:
+        return jsonify({'error': 'invalid_name', 'message': 'El nombre del rol es requerido.'}), 400
+
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        try:
+            placeholder = _placeholder_for(conn)
+            sql = f'INSERT INTO rol_sistema (nombre, descripcion, estado) VALUES ({placeholder}, {placeholder}, 1)'
+            cur.execute(sql, (nombre, descripcion))
+            conn.commit()
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        return jsonify({'success': True})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': 'create_failed', 'message': str(e)}), 500
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+@roles_api.route('/api/roles/<int:role_id>', methods=['DELETE'])
+def eliminar_rol(role_id):
+    """Eliminar un rol existente."""
+    if not _has_permission('administracion.eliminar'):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        try:
+            placeholder = _placeholder_for(conn)
+            cur.execute(f'DELETE FROM rol_sistema WHERE id = {placeholder}', (role_id,))
+            conn.commit()
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        return jsonify({'success': True})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': 'delete_failed', 'message': str(e)}), 500
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 # ============================================================
 # ENDPOINTS DE PERMISOS por ROL (usando tablas permisos y detalle_del_permiso)
 # ============================================================
@@ -49,6 +121,9 @@ def listar_roles():
 @roles_api.route('/api/permisos-modulos', methods=['GET'])
 def listar_permisos_modulos():
     """Listar todos los permisos (módulos) disponibles"""
+    if not _has_permission('administracion.ver'):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
     conn = get_connection()
     try:
         cur = conn.cursor()
@@ -75,9 +150,17 @@ def listar_permisos_modulos():
             pass
 
 
+@roles_api.route('/api/permisos', methods=['GET'])
+def listar_permisos_alias():
+    return listar_permisos_modulos()
+
+
 @roles_api.route('/api/roles/<int:role_id>/permisos', methods=['GET'])
 def listar_permisos_del_rol(role_id):
     """Listar permisos asignados a un rol específico"""
+    if not _has_permission('administracion.ver'):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
     conn = get_connection()
     try:
         cur = conn.cursor()
@@ -140,6 +223,9 @@ def listar_permisos_del_rol(role_id):
 @roles_api.route('/api/roles/<int:role_id>/permisos', methods=['POST'])
 def asignar_permisos_a_rol(role_id):
     """Asignar o actualizar permisos de un rol. Recibe matriz de permisos por acción."""
+    if not _has_permission('administracion.editar'):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
     data = request.get_json() or {}
     permiso_matrix = data.get('permiso_matrix')
     permiso_ids = data.get('permiso_ids', [])
@@ -214,6 +300,9 @@ def asignar_permisos_a_rol(role_id):
 @roles_api.route('/api/roles/<int:role_id>/permisos/<int:permiso_id>', methods=['DELETE'])
 def quitar_permiso_de_rol(role_id, permiso_id):
     """Quitar un permiso específico de un rol"""
+    if not _has_permission('administracion.eliminar'):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
     conn = get_connection()
     try:
         cur = conn.cursor()

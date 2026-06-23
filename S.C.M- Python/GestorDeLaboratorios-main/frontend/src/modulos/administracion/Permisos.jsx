@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import PermissionGate, { hasPermission } from '../../ui/PermissionGate';
 
 export default function Permisos({ onGoHome }) {
   const [roles, setRoles] = useState([]);
   const [permisos, setPermisos] = useState([]);
   const [rolSeleccionado, setRolSeleccionado] = useState(null);
+  const canEdit = hasPermission('administracion.editar');
   const [loadingRoles, setLoadingRoles] = useState(true);
   const [loadingPermisos, setLoadingPermisos] = useState(true);
   const [loadingPermisosDelRol, setLoadingPermisosDelRol] = useState(false);
@@ -150,14 +152,19 @@ export default function Permisos({ onGoHome }) {
   };
 
   return (
-    <div className="container py-4">
-      <div className="card shadow-sm">
-        <div className="card-header d-flex justify-content-between align-items-center bg-primary text-white">
-          <h5 className="mb-0">Gestión de Permisos</h5>
-          <button className="btn btn-sm btn-light" onClick={onGoHome}>Volver atrás</button>
-        </div>
+    <PermissionGate permissionKey="administracion.ver" fallback={
+      <div className="container py-4">
+        <div className="alert alert-warning">Tu rol no tiene permisos para ver la gestión de permisos.</div>
+      </div>
+    }>
+      <div className="container py-4">
+        <div className="card shadow-sm">
+          <div className="card-header d-flex justify-content-between align-items-center bg-primary text-white">
+            <h5 className="mb-0">Gestión de Permisos</h5>
+            <button className="btn btn-sm btn-light" onClick={onGoHome}>Volver atrás</button>
+          </div>
 
-        <div className="card-body">
+          <div className="card-body">
           {/* Selector de Rol */}
           <div className="mb-4">
             <label className="form-label fw-bold">Seleccionar Rol</label>
@@ -220,6 +227,7 @@ export default function Permisos({ onGoHome }) {
                             type="checkbox"
                             className="form-check-input"
                             checked={Boolean(permiso.ver)}
+                            disabled={!canEdit}
                             onChange={() => handleCheckboxChange(permiso.id, 'ver')}
                           />
                         </td>
@@ -228,6 +236,7 @@ export default function Permisos({ onGoHome }) {
                             type="checkbox"
                             className="form-check-input"
                             checked={Boolean(permiso.crear)}
+                            disabled={!canEdit}
                             onChange={() => handleCheckboxChange(permiso.id, 'crear')}
                           />
                         </td>
@@ -236,6 +245,7 @@ export default function Permisos({ onGoHome }) {
                             type="checkbox"
                             className="form-check-input"
                             checked={Boolean(permiso.editar)}
+                            disabled={!canEdit}
                             onChange={() => handleCheckboxChange(permiso.id, 'editar')}
                           />
                         </td>
@@ -244,6 +254,7 @@ export default function Permisos({ onGoHome }) {
                             type="checkbox"
                             className="form-check-input"
                             checked={Boolean(permiso.eliminar)}
+                            disabled={!canEdit}
                             onChange={() => handleCheckboxChange(permiso.id, 'eliminar')}
                           />
                         </td>
@@ -261,7 +272,7 @@ export default function Permisos({ onGoHome }) {
               <button
                 className="btn btn-primary"
                 onClick={guardarCambios}
-                disabled={guardando || loadingPermisosDelRol}
+                disabled={guardando || loadingPermisosDelRol || !canEdit}
               >
                 {guardando ? (
                   <>
@@ -275,7 +286,7 @@ export default function Permisos({ onGoHome }) {
               <button
                 className="btn btn-outline-secondary"
                 onClick={restaurarPermisos}
-                disabled={guardando || loadingPermisosDelRol}
+                disabled={guardando || loadingPermisosDelRol || !canEdit}
               >
                 🔄 Restaurar
               </button>
@@ -284,5 +295,6 @@ export default function Permisos({ onGoHome }) {
         </div>
       </div>
     </div>
+    </PermissionGate>
   );
 }

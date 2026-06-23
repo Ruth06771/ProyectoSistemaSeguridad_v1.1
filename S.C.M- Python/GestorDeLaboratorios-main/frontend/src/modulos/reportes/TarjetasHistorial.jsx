@@ -38,7 +38,7 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
     const { name, value } = e.target;
     const nextForm = { ...form, [name]: value };
     setForm(nextForm);
-    if (name === 'accion' && onFiltrar) {
+    if (name === 'estado' && onFiltrar) {
       setLoading(true);
       Promise.resolve(onFiltrar(nextForm)).finally(() => setLoading(false));
     }
@@ -74,8 +74,9 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
     return enrolarData.find(item => item.id === row.enrolar_id || item.tarjeta_uid === row.tarjeta_uid || item.tarjeta_uid === row.uid_tarjeta);
   };
 
-  const displayRows = resultados.length > 0 ? resultados : enrolarData;
-  const showingEnrolarData = resultados.length === 0;
+  const hasActiveFilters = Object.keys(form).some(key => String(form[key] || '').trim() !== '');
+  const displayRows = (resultados.length > 0 || hasActiveFilters) ? resultados : enrolarData;
+  const showingEnrolarData = !hasActiveFilters && resultados.length === 0;
 
   const openDownload = (url) => {
     const link = document.createElement('a');
@@ -166,7 +167,7 @@ export default function TarjetasHistorial({ onFiltrar, resultados = [], filtros 
         </div>
         <div className="col-md-3">
           <label className="form-label">Estado</label>
-          <select className="form-select" name="accion" value={form.accion || ''} onChange={handleChange}>
+          <select className="form-select" name="estado" value={form.estado || ''} onChange={handleChange}>
             <option value="">-- Todas --</option>
             <option value="activo">Activo</option>
             <option value="inactivo">Inactivo</option>

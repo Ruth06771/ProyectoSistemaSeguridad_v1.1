@@ -15,6 +15,7 @@ PERMISOS = [
     (2, 'Enrolar', 'Acceso al módulo de enrolar'),
     (3, 'Seguridad', 'Acceso al módulo de seguridad'),
     (4, 'Reportes', 'Acceso al módulo de reportes'),
+    (5, 'Administración', 'Acceso al módulo de administración (personas, usuarios, dispositivos, etc.)'),
 ]
 
 ADMIN_ROLE_ID = 1

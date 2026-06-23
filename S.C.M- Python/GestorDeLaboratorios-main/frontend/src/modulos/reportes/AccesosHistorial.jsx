@@ -11,20 +11,20 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
 
   useEffect(() => {
     if (onFiltrar) onFiltrar(filtros || {});
-    if (filtros.tipo_movimiento) setActiveFilter('tipo_movimiento');
+    if (filtros.accion) setActiveFilter('accion');
     else if (filtros.resultado) setActiveFilter('resultado');
     else if (filtros.credencial) setActiveFilter('credencial');
   }, []);
 
   const clearExclusiveFilters = (selectedName, nextForm) => {
-    if (selectedName === 'tipo_movimiento') {
+    if (selectedName === 'accion') {
       return { ...nextForm, resultado: '', credencial: '' };
     }
     if (selectedName === 'resultado') {
-      return { ...nextForm, tipo_movimiento: '', credencial: '' };
+      return { ...nextForm, accion: '', credencial: '' };
     }
     if (selectedName === 'credencial') {
-      return { ...nextForm, tipo_movimiento: '', resultado: '' };
+      return { ...nextForm, accion: '', resultado: '' };
     }
     return nextForm;
   };
@@ -41,7 +41,7 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
     const toDate = parseDateValue(filters.fecha_hasta);
 
     return list.filter(row => {
-      if (filters.tipo_movimiento && row.movimiento !== filters.tipo_movimiento) return false;
+      if (filters.accion && String(row.accion || '').trim().toLowerCase() !== String(filters.accion || '').trim().toLowerCase()) return false;
       if (filters.resultado && row.resultado !== filters.resultado) return false;
       if (filters.credencial && row.credencial !== filters.credencial) return false;
 
@@ -61,7 +61,7 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
     const { name, value } = e.target;
     let nextForm = { ...form, [name]: value };
 
-    if (['tipo_movimiento', 'resultado', 'credencial'].includes(name)) {
+    if (['accion', 'resultado', 'credencial'].includes(name)) {
       nextForm = clearExclusiveFilters(name, nextForm);
       setActiveFilter(name);
     }
@@ -246,11 +246,12 @@ export default function AccesosHistorial({ onFiltrar, resultados = [], filtros =
           <input type="date" className="form-control" name="fecha_hasta" value={form.fecha_hasta || ''} onChange={handleChange} />
         </div>
         <div className="col-md-2">
-          <label className="form-label">Movimiento</label>
-          <select className="form-select" name="tipo_movimiento" value={form.tipo_movimiento || ''} onChange={handleChange}>
-            <option value="">-- Todos --</option>
-            <option value="Entrada">Entrada</option>
-            <option value="Salida">Salida</option>
+          <label className="form-label">Acción</label>
+          <select className="form-select" name="accion" value={form.accion || ''} onChange={handleChange}>
+            <option value="">-- Todas --</option>
+            <option value="RETIRAR">RETIRAR</option>
+            <option value="DEVOLVER">DEVOLVER</option>
+            <option value="INTENTO DE ACCESO">INTENTO DE ACCESO</option>
           </select>
         </div>
         <div className="col-md-2">

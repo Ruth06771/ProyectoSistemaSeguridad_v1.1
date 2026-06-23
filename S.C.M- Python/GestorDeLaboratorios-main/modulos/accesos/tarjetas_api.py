@@ -65,6 +65,52 @@ def registrar_tarjeta():
     try:
         cursor = connection.cursor()
         try:
+            tarjeta_id = None
+            placeholder = '%s'
+            if connection.__class__.__module__.startswith('sqlite3'):
+                placeholder = '?'
+
+            # Validar UID solo contra tarjetas activas
+            cursor.execute(f"SELECT id, estado FROM tarjetas WHERE LOWER(uid) = LOWER({placeholder})", (valores[0],))
+            existing = cursor.fetchone()
+            if existing:
+                existing_row = dict(existing) if hasattr(existing, 'keys') else {'id': existing[0], 'estado': existing[1]}
+                if int(existing_row['estado']) == 1:
+                    return jsonify({'error': 'duplicate_uid', 'message': 'El UID ya existe'}), 400
+
+                # Reactivar tarjeta inactiva y actualizar PIN
+                update_sql = f"UPDATE tarjetas SET estado = {placeholder}, pin = {placeholder} WHERE id = {placeholder}"
+                cursor.execute(update_sql, (1, valores[3], existing_row['id']))
+                connection.commit()
+                tarjeta_id = existing_row['id']
+
+                try:
+                    placeholder_hist = '?' if connection.__class__.__module__.startswith('sqlite3') else '%s'
+                    fecha_hora_func = "datetime('now')" if connection.__class__.__module__.startswith('sqlite3') else 'NOW()'
+                    sql_hist = f"""
+                        INSERT INTO historial_tarjetas (tarjeta_id, uid, nombre_completo, accion, ejecutado_por, descripcion, fecha_hora)
+                        VALUES ({placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {placeholder_hist}, {fecha_hora_func})
+                    """
+                    usuario = session.get('usuario') if session else 'Sistema'
+                    cursor.execute(sql_hist, (
+                        tarjeta_id,
+                        str(valores[0] or ''),
+                        str(valores[1] or ''),
+                        'reactivada',
+                        usuario,
+                        f'Tarjeta reactivada: {valores[1]} ({valores[0]})'
+                    ))
+                    connection.commit()
+                except Exception as hist_err:
+                    print(f"[ERROR] No se registró reactivación en historial: {hist_err}")
+
+                try:
+                    log_action(connection, 'tarjetas', entidad_id=tarjeta_id, entidad_tipo='tarjeta', accion='reactivada', usuario=session.get('usuario') if session else 'Sistema', descripcion=f"Reactivada tarjeta uid={valores[0]}")
+                except Exception:
+                    pass
+
+                return jsonify({'success': True, 'reactivated': True})
+
             sql = """
                 INSERT INTO tarjetas (uid, nombre_completo, correo, pin, estado)
                 VALUES (%s, %s, %s, %s, %s)

@@ -60,6 +60,33 @@ def validar_login():
         if correo == EMERGENCY_BACKUP_USER['correo'] and password == EMERGENCY_BACKUP_USER['password']:
             session['usuario'] = correo
             session['rol'] = EMERGENCY_BACKUP_USER['rol']
+            session['permissions'] = {
+                'configuracion': True,
+                'configuracion.ver': True,
+                'configuracion.crear': True,
+                'configuracion.editar': True,
+                'configuracion.eliminar': True,
+                'enrolar': True,
+                'enrolar.ver': True,
+                'enrolar.crear': True,
+                'enrolar.editar': True,
+                'enrolar.eliminar': True,
+                'seguridad': True,
+                'seguridad.ver': True,
+                'seguridad.crear': True,
+                'seguridad.editar': True,
+                'seguridad.eliminar': True,
+                'reportes': True,
+                'reportes.ver': True,
+                'reportes.crear': True,
+                'reportes.editar': True,
+                'reportes.eliminar': True,
+                'administracion': True,
+                'administracion.ver': True,
+                'administracion.crear': True,
+                'administracion.editar': True,
+                'administracion.eliminar': True
+            }
             print(f"[WARN] Emergency backup account used (database unavailable)")
             return redirect(url_for('dashboard', rol=session['rol']))
         else:

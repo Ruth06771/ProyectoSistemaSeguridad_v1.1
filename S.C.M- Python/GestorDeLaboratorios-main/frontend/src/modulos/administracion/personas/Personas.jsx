@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import RegistrarPersona from './RegistrarPersona';
 import EditarPersona from './EditarPersona';
+import PermissionGate from '../../../ui/PermissionGate';
 
 export default function Personas({ onGoHome }) {
   const [personas, setPersonas] = useState([]);
@@ -66,7 +67,7 @@ export default function Personas({ onGoHome }) {
       const data = await res.json();
       if (data.success) {
         setStatusMsg('Persona eliminada correctamente');
-        fetchPersonas();
+        setPersonas(prev => prev.filter(p => p.id !== id));
       } else {
         setStatusMsg(data.error || 'Error al eliminar');
       }
@@ -88,7 +89,13 @@ export default function Personas({ onGoHome }) {
       const data = await res.json();
       if (data.success) {
         setStatusMsg(`Estado actualizado a ${estado === 1 ? 'Activo' : 'Inactivo'}`);
-        fetchPersonas();
+        if (estado === 0) {
+          // Si se marca como inactivo (estado = 0), remover de la lista local
+          setPersonas(prev => prev.filter(p => p.id !== id));
+        } else {
+          // Si se activa, actualizar el registro localmente
+          setPersonas(prev => prev.map(p => p.id === id ? { ...p, estado } : p));
+        }
       } else {
         setStatusMsg(data.error || 'Error al actualizar estado');
       }
@@ -136,11 +143,16 @@ export default function Personas({ onGoHome }) {
   }
 
   return (
-    <div className="container py-4">
-      
-      <button className="btn btn-outline-secondary mb-3" onClick={() => window.location.href = '/'}>
-         ← Volver al inicio
-      </button>
+    <PermissionGate permissionKey="administracion.ver" fallback={
+      <div className="container py-4">
+        <div className="alert alert-warning">Tu rol no tiene permisos para ver la gestión de personas.</div>
+      </div>
+    }>
+      <div className="container py-4">
+        
+        <button className="btn btn-outline-secondary mb-3" onClick={() => window.location.href = '/'}>
+           ← Volver al inicio
+        </button>
       <div className="card shadow-sm mb-4">
         <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center">
           <h5 className="mb-0">Personas Registradas</h5>
@@ -151,9 +163,11 @@ export default function Personas({ onGoHome }) {
             <button className="btn btn-outline-secondary" onClick={handleRefresh}>
               <i className="bi bi-arrow-clockwise me-2"></i> Actualizar
             </button>
-            <button className="btn btn-primary" onClick={handleAdd}>
-              <i className="bi bi-person-plus me-2"></i> Nueva Persona
-            </button>
+            <PermissionGate permissionKey="administracion.crear">
+              <button className="btn btn-primary" onClick={handleAdd}>
+                <i className="bi bi-person-plus me-2"></i> Nueva Persona
+              </button>
+            </PermissionGate>
           </div>
 
           {statusMsg && (
@@ -191,34 +205,38 @@ export default function Personas({ onGoHome }) {
                       </td>
                       <td>
                         <div className="d-flex gap-1 flex-wrap">
-                          <button
-                            type="button"
-                            className={`btn btn-sm flex-fill ${p.estado == 1 ? 'btn-success' : 'btn-outline-success'}`}
-                            onClick={() => handleToggleEstado(p.id, 1)}
-                          >
-                            Activo
-                          </button>
-                          <button
-                            type="button"
-                            className={`btn btn-sm flex-fill ${p.estado == 0 ? 'btn-danger' : 'btn-outline-danger'}`}
-                            onClick={() => handleToggleEstado(p.id, 0)}
-                          >
-                            Inactivo
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-warning flex-fill"
-                            onClick={() => handleEdit(p.id)}
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-danger flex-fill"
-                            onClick={() => handleDelete(p.id)}
-                          >
-                            Eliminar
-                          </button>
+                          <PermissionGate permissionKey="administracion.editar">
+                            <button
+                              type="button"
+                              className={`btn btn-sm flex-fill ${p.estado == 1 ? 'btn-success' : 'btn-outline-success'}`}
+                              onClick={() => handleToggleEstado(p.id, 1)}
+                            >
+                              Activo
+                            </button>
+                            <button
+                              type="button"
+                              className={`btn btn-sm flex-fill ${p.estado == 0 ? 'btn-danger' : 'btn-outline-danger'}`}
+                              onClick={() => handleToggleEstado(p.id, 0)}
+                            >
+                              Inactivo
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-warning flex-fill"
+                              onClick={() => handleEdit(p.id)}
+                            >
+                              Editar
+                            </button>
+                          </PermissionGate>
+                          <PermissionGate permissionKey="administracion.eliminar">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger flex-fill"
+                              onClick={() => handleDelete(p.id)}
+                            >
+                              Eliminar
+                            </button>
+                          </PermissionGate>
                         </div>
                       </td>
                     </tr>
@@ -234,5 +252,6 @@ export default function Personas({ onGoHome }) {
         </div>
       </div>
     </div>
+    </PermissionGate>
   );
 }

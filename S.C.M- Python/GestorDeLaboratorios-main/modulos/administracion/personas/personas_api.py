@@ -44,6 +44,10 @@ def ensure_persona_creation_history(connection):
 # Listar personas
 @personas_api.route('/api/personas', methods=['GET'])
 def listar_personas():
+    permissions = session.get('permissions', {})
+    if not permissions.get('administracion.ver', False):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
     connection, err = try_get_connection()
     if err:
         return jsonify({'error': 'db_connection', 'message': err}), 500
@@ -73,6 +77,14 @@ def listar_personas():
 # Registrar persona
 @personas_api.route('/api/personas', methods=['POST'])
 def registrar_persona():
+    # --- Verificar permisos de creación ---
+    permissions = session.get('permissions', {})
+    if not permissions.get('administracion.crear', False):
+        return jsonify({
+            'success': False,
+            'message': 'Acceso denegado: Tu rol no tiene permisos para crear registros.'
+        }), 403
+    
     data = request.get_json()
     # --- Validar correo antes de proceder ---
     correo = (data.get('correo') or '').strip()
@@ -185,6 +197,10 @@ def registrar_persona():
 # Obtener persona por ID
 @personas_api.route('/api/personas/<int:id>', methods=['GET'])
 def obtener_persona(id):
+    permissions = session.get('permissions', {})
+    if not permissions.get('administracion.ver', False):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
     connection, err = try_get_connection()
     if err:
         return jsonify({'error': 'db_connection', 'message': err}), 500
@@ -216,6 +232,14 @@ def obtener_persona(id):
 # Editar persona
 @personas_api.route('/api/personas/<int:id>', methods=['PUT'])
 def editar_persona(id):
+    # --- Verificar permisos de edición ---
+    permissions = session.get('permissions', {})
+    if not permissions.get('administracion.editar', False):
+        return jsonify({
+            'success': False,
+            'message': 'Acceso denegado: Tu rol no tiene permisos para editar registros.'
+        }), 403
+    
     data = request.get_json()
     # --- Validar correo solo si se proporcionó ---
     correo = (data.get('correo') or '').strip()
@@ -283,6 +307,10 @@ def editar_persona(id):
 # Actualizar solo el estado de una persona
 @personas_api.route('/api/personas/<int:id>/estado', methods=['PUT'])
 def actualizar_estado_persona(id):
+    permissions = session.get('permissions', {})
+    if not permissions.get('administracion.editar', False):
+        return jsonify({'error': 'forbidden', 'message': 'Acceso denegado'}), 403
+
     data = request.get_json() or {}
     estado = data.get('estado')
     if estado not in (0, 1, '0', '1'):
@@ -300,29 +328,43 @@ def actualizar_estado_persona(id):
             if connection.__class__.__module__.startswith('sqlite3'):
                 placeholder = '?'
             sql = f"UPDATE personas SET estado = {placeholder} WHERE id = {placeholder}"
+            print(f"[DEBUG] Actualizando estado={estado} para persona id={id}")
+            print(f"[DEBUG] SQL: {sql}, params: {params}")
             cursor.execute(sql, params)
+            print(f"[DEBUG] cursor.execute completado, ahora ejecutando commit...")
             connection.commit()
+            print(f"[DEBUG] ✓ COMMIT EXITOSO para estado de persona {id}")
             try:
                 accion = 'activate' if estado == 1 else 'deactivate'
                 log_action(connection, 'personas', entidad_id=id, entidad_tipo='persona', accion=accion, usuario=session.get('usuario') if session else None, descripcion=f"{'Activada' if estado == 1 else 'Inactivada'} persona id={id}")
-            except Exception:
-                pass
+            except Exception as log_err:
+                print(f"[WARNING] Error en log_action: {log_err}")
         finally:
             try:
                 cursor.close()
             except Exception:
                 pass
         return jsonify({'success': True})
-    except Exception:
+    except Exception as e:
+        print(f"[ERROR] UPDATE estado failed: {e}")
         traceback.print_exc()
-        return jsonify({'error': 'update_failed'}), 500
+        return jsonify({'error': 'update_failed', 'message': str(e)}), 500
     finally:
         connection.close()
 
 
-# Eliminar persona por ID (API)
+# Eliminar persona por ID o correo (API)
 @personas_api.route('/api/personas/<int:id>', methods=['DELETE'])
 def eliminar_persona_api(id):
+    # --- Verificar permisos de eliminación ---
+    permissions = session.get('permissions', {})
+    if not permissions.get('administracion.eliminar', False):
+        return jsonify({
+            'success': False,
+            'message': 'Acceso denegado: Tu rol no tiene permisos para eliminar registros.'
+        }), 403
+    
+    correo_query = (request.args.get('correo') or '').strip()
     connection, err = try_get_connection()
     if err:
         return jsonify({'error': 'db_connection', 'message': err}), 500
@@ -330,15 +372,67 @@ def eliminar_persona_api(id):
         cursor = connection.cursor()
         try:
             placeholder = '%s'
-            params = (id,)
             if connection.__class__.__module__.startswith('sqlite3'):
                 placeholder = '?'
-            # Borrado lógico: marcar como inactivo en lugar de eliminar
-            cursor.execute(f"UPDATE personas SET estado = 0 WHERE id = {placeholder}", params)
+
+            if correo_query:
+                # Buscar persona por correo para eliminar en cascada
+                if connection.__class__.__module__.startswith('sqlite3'):
+                    cursor.execute("SELECT id, correo FROM personas WHERE LOWER(correo) = LOWER(?) LIMIT 1", (correo_query,))
+                else:
+                    cursor.execute("SELECT id, correo FROM personas WHERE LOWER(correo) = LOWER(%s) LIMIT 1", (correo_query,))
+                persona_row = cursor.fetchone()
+                if not persona_row:
+                    return jsonify({'success': False, 'message': 'Persona no encontrada por correo.'}), 404
+                persona_id = persona_row['id'] if hasattr(persona_row, 'keys') else persona_row[0]
+                persona_correo = persona_row['correo'] if hasattr(persona_row, 'keys') else persona_row[1]
+            else:
+                persona_id = id
+                # obtener correo para limpiar usuarios vinculados por correo también
+                if connection.__class__.__module__.startswith('sqlite3'):
+                    cursor.execute("SELECT correo FROM personas WHERE id = ? LIMIT 1", (persona_id,))
+                else:
+                    cursor.execute("SELECT correo FROM personas WHERE id = %s LIMIT 1", (persona_id,))
+                persona_row = cursor.fetchone()
+                if not persona_row:
+                    return jsonify({'success': False, 'message': 'Persona no encontrada.'}), 404
+                persona_correo = persona_row['correo'] if hasattr(persona_row, 'keys') else persona_row[0]
+
+            # Borrado lógico: marcar como inactivo la persona y sus usuarios vinculados.
+            # IMPORTANTE: usar parametrized queries sin f-strings para evitar problemas de sustitución
+            if connection.__class__.__module__.startswith('sqlite3'):
+                # SQLite: ? placeholder
+                print(f"[DEBUG] Marcando persona {persona_id} como inactivo (SQLite)")
+                cursor.execute("UPDATE personas SET estado = 0 WHERE id = ?", (persona_id,))
+                print(f"[DEBUG] Actualizados usuarios vinculados a {persona_id}")
+                cursor.execute(
+                    "UPDATE usuario_sistema SET estado = 0 WHERE persona_id = ? OR LOWER(nombre_usuario) = LOWER(?)",
+                    (persona_id, persona_correo)
+                )
+            else:
+                # MySQL: %s placeholder
+                print(f"[DEBUG] Marcando persona {persona_id} como inactivo (MySQL)")
+                cursor.execute("UPDATE personas SET estado = 0 WHERE id = %s", (persona_id,))
+                print(f"[DEBUG] Actualizados usuarios vinculados a {persona_id}")
+                cursor.execute(
+                    "UPDATE usuario_sistema SET estado = 0 WHERE persona_id = %s OR LOWER(nombre_usuario) = LOWER(%s)",
+                    (persona_id, persona_correo)
+                )
+            print(f"[DEBUG] Ejecutando connection.commit() para persona {persona_id}...")
             connection.commit()
+            print(f"[DEBUG] ✓ COMMIT EXITOSO para persona {persona_id}")
             try:
-                log_action(connection, 'personas', entidad_id=id, entidad_tipo='persona', accion='delete', usuario=session.get('usuario') if session else None, descripcion=f"Eliminada persona id={id}")
-            except Exception:
+                log_action(
+                    connection,
+                    'personas',
+                    entidad_id=persona_id,
+                    entidad_tipo='persona',
+                    accion='delete',
+                    usuario=session.get('usuario') if session else None,
+                    descripcion=f"Eliminada persona id={persona_id} y desactivados usuarios vinculados"
+                )
+            except Exception as log_err:
+                print(f"[WARNING] Error en log_action: {log_err}")
                 pass
         finally:
             try:
@@ -375,7 +469,7 @@ def search_personas_with_tarjeta():
             sql = (
                 "SELECT personas.*, tarjetas.uid AS tarjeta_uid, tarjetas.pin AS tarjeta_pin "
                 "FROM personas LEFT JOIN tarjetas ON (personas.correo = tarjetas.correo OR personas.nombre_completo = tarjetas.nombre_completo) "
-                f"WHERE personas.nombre_completo LIKE {placeholder} OR personas.correo LIKE {placeholder} "
+                f"WHERE personas.estado = 1 AND (personas.nombre_completo LIKE {placeholder} OR personas.correo LIKE {placeholder}) "
                 "ORDER BY personas.nombre_completo ASC, personas.id ASC"
             )
             params = (like, like)

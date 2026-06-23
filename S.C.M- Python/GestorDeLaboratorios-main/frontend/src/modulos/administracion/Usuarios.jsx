@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PermissionGate from '../../ui/PermissionGate';
 
 export default function Usuarios({ onGoHome }) {
   const [usuarios, setUsuarios] = useState([]);
@@ -70,7 +71,7 @@ export default function Usuarios({ onGoHome }) {
       const data = await res.json();
       if (data.success) {
         setMessage({ type: 'success', text: 'Usuario eliminado correctamente.' });
-        fetchUsuarios();
+        setUsuarios(prev => prev.filter(u => u.id !== id));
       } else {
         setMessage({ type: 'danger', text: `Error al eliminar usuario: ${data.error || 'Desconocido'}` });
       }
@@ -91,7 +92,7 @@ export default function Usuarios({ onGoHome }) {
       const data = await res.json();
       if (data.success) {
         setMessage({ type: 'success', text: 'Acceso directo eliminado correctamente.' });
-        fetchAdminUsuarios();
+        setAdminUsuarios(prev => prev.filter(a => a.id !== id));
       } else {
         setMessage({ type: 'danger', text: `Error al eliminar acceso directo: ${data.error || 'Desconocido'}` });
       }
@@ -156,89 +157,99 @@ export default function Usuarios({ onGoHome }) {
   };
 
   return (
-    <div className="container py-4">
-      {/* Formulario de Creación de Admin */}
-      <div className="card shadow-sm mb-4">
+    <PermissionGate permissionKey="administracion.ver" fallback={
+      <div className="container py-4">
+        <div className="alert alert-warning">Tu rol no tiene permisos para ver la gestión de usuarios.</div>
+      </div>
+    }>
+      <div className="container py-4">
+        {/* Formulario de Creación de Admin */}
+        <div className="card shadow-sm mb-4">
         <div className="card-header bg-primary text-white">
           <h5 className="mb-0">Crear Nuevo Usuario</h5>
         </div>
         <div className="card-body">
-          <form onSubmit={handleCreateAdmin}>
-            <div className="row">
-              <div className="col-md-5 mb-3">
-                <label htmlFor="email" className="form-label">Correo Institucional</label>
-                <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  className="form-control"
-                  placeholder="admin@ueb.edu.bo"
-                  value={formData.email}
-                  onChange={handleFormChange}
-                  disabled={creatingAdmin}
-                  required
-                />
-              </div>
-              <div className="col-md-5 mb-3">
-                <label htmlFor="password" className="form-label">Contraseña</label>
-                <div style={{ position: 'relative', display: 'block', width: '100%' }}>
+          <PermissionGate permissionKey="administracion.crear" fallback={
+            <div className="alert alert-warning mb-0" role="alert">
+              Tu rol no tiene permisos para crear usuarios en el módulo de Administración.
+            </div>
+          }>
+            <form onSubmit={handleCreateAdmin}>
+              <div className="row">
+                <div className="col-md-5 mb-3">
+                  <label htmlFor="email" className="form-label">Correo Institucional</label>
                   <input
-                    type={showPassword ? "text" : "password"}
-                    id="password"
-                    name="password"
+                    type="email"
+                    id="email"
+                    name="email"
                     className="form-control"
-                    placeholder="Ingresa contraseña"
-                    value={formData.password}
+                    placeholder="admin@ueb.edu.bo"
+                    value={formData.email}
                     onChange={handleFormChange}
                     disabled={creatingAdmin}
                     required
-                    style={{ paddingRight: '45px', width: '100%' }}
                   />
+                </div>
+                <div className="col-md-5 mb-3">
+                  <label htmlFor="password" className="form-label">Contraseña</label>
+                  <div style={{ position: 'relative', display: 'block', width: '100%' }}>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      id="password"
+                      name="password"
+                      className="form-control"
+                      placeholder="Ingresa contraseña"
+                      value={formData.password}
+                      onChange={handleFormChange}
+                      disabled={creatingAdmin}
+                      required
+                      style={{ paddingRight: '45px', width: '100%' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#000000',
+                        fontWeight: 'bold',
+                        fontSize: '13px',
+                        zIndex: 10
+                      }}
+                    >
+                      {showPassword ? "Ocultar" : "Ver"}
+                    </button>
+                  </div>
+                </div>
+                <div className="col-md-2 d-flex align-items-end mb-3 justify-content-center">
                   <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: '#000000',
-                      fontWeight: 'bold',
-                      fontSize: '13px',
-                      zIndex: 10
-                    }}
+                    type="submit"
+                    className="btn btn-success w-100"
+                    disabled={creatingAdmin}
                   >
-                    {showPassword ? "Ocultar" : "Ver"}
+                    {creatingAdmin ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Guardando...
+                      </>
+                    ) : (
+                      'Guardar en Sistema'
+                    )}
                   </button>
                 </div>
               </div>
-              <div className="col-md-2 d-flex align-items-end mb-3 justify-content-center">
-                <button
-                  type="submit"
-                  className="btn btn-success w-100"
-                  disabled={creatingAdmin}
-                >
-                  {creatingAdmin ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                      Guardando...
-                    </>
-                  ) : (
-                    'Guardar en Sistema'
-                  )}
-                </button>
+            </form>
+            {message.text && (
+              <div className={`alert alert-${message.type} mt-3 mb-0`} role="alert">
+                {message.text}
               </div>
-            </div>
-          </form>
-          
-          {message.text && (
-            <div className={`alert alert-${message.type} mt-3 mb-0`} role="alert">
-              {message.text}
-            </div>
-          )}
+            )}
+          </PermissionGate>
         </div>
       </div>
 
@@ -256,9 +267,15 @@ export default function Usuarios({ onGoHome }) {
               {adminUsuarios.map((admin) => (
                 <li key={admin.id} className="list-group-item d-flex justify-content-between align-items-center">
                   <span>{admin.nombre_usuario} <small className="text-muted">(Clave: {admin.contrasena})</small></span>
-                  <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => deleteAdminUsuario(admin.id)}>
-                    Eliminar
-                  </button>
+                  <PermissionGate permissionKey="administracion.eliminar" fallback={
+                    <button type="button" className="btn btn-sm btn-outline-danger" disabled title="Sin permiso para eliminar">
+                      Eliminar
+                    </button>
+                  }>
+                    <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => deleteAdminUsuario(admin.id)}>
+                      Eliminar
+                    </button>
+                  </PermissionGate>
                 </li>
               ))}
             </ul>
@@ -297,16 +314,32 @@ export default function Usuarios({ onGoHome }) {
                       <td className="text-capitalize">{u.rol || 'estudiante'}</td>
                       <td>
                         <div className="d-flex gap-2">
-                          <select className="form-select form-select-sm d-inline-block w-auto" defaultValue={u.rol || 'estudiante'} onChange={(e) => changeRole(u.id, e.target.value)}>
-                            <option value="administrador">Administrador</option>
-                            <option value="docente">Docente</option>
-                            <option value="estudiante">Estudiante</option>
-                            <option value="auxiliar">Auxiliar</option>
-                            <option value="invitado">Invitado</option>
-                          </select>
-                          <button type="button" className="btn btn-sm btn-danger" onClick={() => deleteUsuario(u.id)}>
-                            Eliminar
-                          </button>
+                          <PermissionGate permissionKey="administracion.editar" fallback={
+                            <select className="form-select form-select-sm d-inline-block w-auto" value={u.rol || 'estudiante'} disabled>
+                              <option value="administrador">Administrador</option>
+                              <option value="docente">Docente</option>
+                              <option value="estudiante">Estudiante</option>
+                              <option value="auxiliar">Auxiliar</option>
+                              <option value="invitado">Invitado</option>
+                            </select>
+                          }>
+                            <select className="form-select form-select-sm d-inline-block w-auto" defaultValue={u.rol || 'estudiante'} onChange={(e) => changeRole(u.id, e.target.value)}>
+                              <option value="administrador">Administrador</option>
+                              <option value="docente">Docente</option>
+                              <option value="estudiante">Estudiante</option>
+                              <option value="auxiliar">Auxiliar</option>
+                              <option value="invitado">Invitado</option>
+                            </select>
+                          </PermissionGate>
+                          <PermissionGate permissionKey="administracion.eliminar" fallback={
+                            <button type="button" className="btn btn-sm btn-danger" disabled title="Sin permiso para eliminar">
+                              Eliminar
+                            </button>
+                          }>
+                            <button type="button" className="btn btn-sm btn-danger" onClick={() => deleteUsuario(u.id)}>
+                              Eliminar
+                            </button>
+                          </PermissionGate>
                         </div>
                       </td>
                     </tr>
@@ -318,5 +351,6 @@ export default function Usuarios({ onGoHome }) {
         </div>
       </div>
     </div>
+    </PermissionGate>
   );
 }

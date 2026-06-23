@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PermissionGate from '../../../ui/PermissionGate';
 
 export default function EditarPersona({ persona, onSubmit, onCancel, messages }) {
   const [form, setForm] = useState({
@@ -77,10 +78,19 @@ export default function EditarPersona({ persona, onSubmit, onCancel, messages })
   return (
     <div className="container my-4">
       <h2 className="mb-4">Editar Persona</h2>
-      {messages && messages.map(([category, msg], i) => (
-        <div key={i} className={`alert alert-${category}`}>{msg}</div>
-      ))}
-      <form className={`needs-validation${validated ? ' was-validated' : ''}`} noValidate onSubmit={handleSubmit}>
+      <PermissionGate
+        permissionKey="administracion.editar"
+        fallback={
+          <div className="alert alert-danger" role="alert">
+            <strong>Acceso denegado</strong>
+            <p className="mb-0">Tu rol no tiene permisos para editar registros en el módulo de Administración. Por favor contacta a un administrador si crees que esto es un error.</p>
+          </div>
+        }
+      >
+        {messages && messages.map(([category, msg], i) => (
+          <div key={i} className={`alert alert-${category}`}>{msg}</div>
+        ))}
+        <form className={`needs-validation${validated ? ' was-validated' : ''}`} noValidate onSubmit={handleSubmit}>
         <div className="row g-3">
           <div className="col-md-6">
             <label className="form-label">Nombre Completo *</label>
@@ -169,7 +179,9 @@ export default function EditarPersona({ persona, onSubmit, onCancel, messages })
           <button type="button" className="btn btn-secondary" onClick={onCancel}>← Cancelar</button>
           <button type="submit" className="btn btn-primary">Guardar Cambios</button>
         </div>
-      </form>
+        </form>
+      </PermissionGate>
     </div>
   );
 }
+

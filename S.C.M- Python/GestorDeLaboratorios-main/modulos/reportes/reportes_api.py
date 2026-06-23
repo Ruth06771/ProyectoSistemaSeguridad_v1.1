@@ -52,7 +52,11 @@ def accesos_historial():
         else:
             filtros.append('LOWER(TRIM(ra.credencial)) = ?')
             valores.append(credencial_val)
-    if params.get('tipo_movimiento'):
+
+    if params.get('accion'):
+        filtros.append('LOWER(TRIM(ra.accion)) = ?')
+        valores.append(params['accion'].strip().lower())
+    elif params.get('tipo_movimiento'):
         filtros.append('LOWER(TRIM(tm.movimiento)) = ?')
         valores.append(params['tipo_movimiento'].strip().lower())
     
@@ -220,7 +224,10 @@ def enrolamiento_historial():
     if params.get('fecha_hasta'):
         filtros.append('fecha_hora <= ?')
         valores.append(f"{params['fecha_hasta']} 23:59:59")
-    if params.get('accion'):
+    if params.get('estado'):
+        filtros.append('LOWER(TRIM(estado)) = ?')
+        valores.append(params['estado'].strip().lower())
+    elif params.get('accion'):
         filtros.append('LOWER(TRIM(estado)) = ?')
         valores.append(params['accion'].strip().lower())
     if params.get('responsable'):

@@ -288,7 +288,8 @@ export default function Enrolar({ onGoHome }) {
       try {
         const res = await fetch('/api/personas', { credentials: 'include' });
         const data = await res.json();
-        setPersonasList(data || []);
+        const filtered = (Array.isArray(data) ? data : []).filter((p) => p && (p.estado === 1 || p.estado === '1'));
+        setPersonasList(filtered);
       } catch (err) {
         console.error('No se pudo cargar la lista de personas', err);
       }
@@ -353,7 +354,8 @@ export default function Enrolar({ onGoHome }) {
           return;
         }
         const data = await res.json();
-        setSuggestions(data || []);
+        const filtered = (Array.isArray(data) ? data : []).filter((p) => p && (p.estado === 1 || p.estado === '1'));
+        setSuggestions(filtered);
         setShowSuggestions(true);
       } catch (err) {
         console.error('Error buscando personas', err);

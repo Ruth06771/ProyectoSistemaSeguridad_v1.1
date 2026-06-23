@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PermissionGate from '../../../ui/PermissionGate';
 
 export default function RegistrarPersona({ onSuccess, onCancel, onGoHome }) {
   const [form, setForm] = useState({
@@ -86,8 +87,7 @@ export default function RegistrarPersona({ onSuccess, onCancel, onGoHome }) {
     if (e.target.checkValidity()) {
       try {
         const res = await fetch('/api/personas', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',          credentials: 'include',          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(form)
         });
         const data = await res.json();
@@ -112,11 +112,20 @@ export default function RegistrarPersona({ onSuccess, onCancel, onGoHome }) {
         <button className="btn btn-outline-primary" onClick={onGoHome}>🏠 Volver al inicio</button>
       </div>
 
-      {messages.map(([cat, msg], i) => (
-        <div key={i} className={`alert alert-${cat}`}>{msg}</div>
-      ))}
+      <PermissionGate
+        permissionKey="administracion.crear"
+        fallback={
+          <div className="alert alert-danger" role="alert">
+            <strong>Acceso denegado</strong>
+            <p className="mb-0">Tu rol no tiene permisos para crear registros en el módulo de Administración. Por favor contacta a un administrador si crees que esto es un error.</p>
+          </div>
+        }
+      >
+        {messages.map(([cat, msg], i) => (
+          <div key={i} className={`alert alert-${cat}`}>{msg}</div>
+        ))}
 
-      <form noValidate className={validated ? 'was-validated' : ''} onSubmit={handleSubmit}>
+        <form noValidate className={validated ? 'was-validated' : ''} onSubmit={handleSubmit}>
         <div className="row g-3">
           {/* --- DATOS PERSONALES --- */}
           <div className="col-md-6">
@@ -273,6 +282,7 @@ export default function RegistrarPersona({ onSuccess, onCancel, onGoHome }) {
           <button type="submit" className="btn btn-primary">Registrar</button>
         </div>
       </form>
+      </PermissionGate>
     </div>
   );
 }
