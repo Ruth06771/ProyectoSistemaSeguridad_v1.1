@@ -56,9 +56,9 @@ export default function TopNav({ usuario, onLogout, onNavigate }) {
       <div ref={rootRef} className="topnav-inner container d-flex align-items-center justify-content-between">
         <div className="d-flex align-items-center gap-3 brand-wrap" onClick={() => onNavigate('dashboard')}>
           <div className="brand" aria-hidden>
-            {/* University logo: use the dev server public asset in dev, otherwise request from backend */}
+            {/* University logo: use a root-relative public asset so remote access works from any host */}
             <img
-              src={window.location.port === '3000' ? '/ueb-logo.png' : '/img/ueb-logo.png'}
+              src="/ueb-logo.png"
               alt="Universidad Evangélica Boliviana"
               className="brand-logo"
             />

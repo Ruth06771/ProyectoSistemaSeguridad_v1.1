@@ -1,0 +1,141 @@
+
+> gestor-de-laboratorios-frontend@1.0.0 dev
+> vite --host --host
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+Port 3000 is in use, trying another one...
+
+  VITE v5.4.21  ready in 854 ms
+
+  ➜  Local:   http://localhost:3001/
+  ➜  Network: http://192.168.10.253:3001/
+  ➜  Network: http://100.97.218.121:3001/
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Sending Request to the Target: GET /api/session
+proxy error Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1631:16) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+12:24:51 [vite] http proxy error: /api/session
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1631:16)
+Sending Request to the Target: POST /api/login
+proxy error Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1631:16) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+12:24:57 [vite] http proxy error: /api/login
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1631:16)
+Sending Request to the Target: GET /api/session
+proxy error Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1631:16) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+12:26:22 [vite] http proxy error: /api/session
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1631:16)
+Sending Request to the Target: POST /api/login
+proxy error Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1631:16) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5000
+}
+12:26:32 [vite] http proxy error: /api/login
+Error: connect ECONNREFUSED 127.0.0.1:5000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1631:16)
+Sending Request to the Target: GET /api/session
+Received Response from the Target: 200 /api/session
+Sending Request to the Target: GET /api/metrics
+Received Response from the Target: 200 /api/metrics
+Sending Request to the Target: GET /api/reportes/accesos_historial
+Sending Request to the Target: GET /api/tarjetas
+Received Response from the Target: 200 /api/reportes/accesos_historial
+Received Response from the Target: 200 /api/tarjetas
+Sending Request to the Target: POST /api/logout
+Received Response from the Target: 200 /api/logout
+Sending Request to the Target: POST /api/login
+Received Response from the Target: 200 /api/login
+Sending Request to the Target: GET /api/metrics
+Received Response from the Target: 200 /api/metrics
+Sending Request to the Target: GET /api/tarjetas
+Received Response from the Target: 200 /api/tarjetas
+Sending Request to the Target: GET /api/reportes/accesos_historial
+Received Response from the Target: 200 /api/reportes/accesos_historial
+Sending Request to the Target: GET /api/personas
+Received Response from the Target: 200 /api/personas
+Sending Request to the Target: GET /api/tarjetas
+Received Response from the Target: 200 /api/tarjetas
+Sending Request to the Target: GET /api/tipo_movimiento
+Received Response from the Target: 200 /api/tipo_movimiento
+Sending Request to the Target: GET /api/personas
+Received Response from the Target: 200 /api/personas
+Sending Request to the Target: GET /api/personas
+Received Response from the Target: 200 /api/personas
+Sending Request to the Target: GET /api/tarjetas
+Received Response from the Target: 200 /api/tarjetas
+Sending Request to the Target: GET /api/perfil_acceso_lab
+Received Response from the Target: 200 /api/perfil_acceso_lab
+Sending Request to the Target: GET /api/enrolar
+Received Response from the Target: 200 /api/enrolar
+Sending Request to the Target: GET /api/admins
+Sending Request to the Target: GET /api/usuarios
+Received Response from the Target: 200 /api/admins
+Received Response from the Target: 200 /api/usuarios
+Sending Request to the Target: GET /api/permisos-modulos
+Sending Request to the Target: GET /api/roles
+Received Response from the Target: 200 /api/roles
+Received Response from the Target: 200 /api/permisos-modulos
+Sending Request to the Target: GET /api/roles/1/permisos
+Received Response from the Target: 200 /api/roles/1/permisos
+Sending Request to the Target: GET /api/permisos
+Sending Request to the Target: GET /api/roles
+Received Response from the Target: 200 /api/permisos
+Received Response from the Target: 200 /api/roles
+Sending Request to the Target: GET /api/bitacora?limit=25
+Received Response from the Target: 200 /api/bitacora?limit=25
+Sending Request to the Target: GET /api/admins
+Sending Request to the Target: GET /api/usuarios
+Received Response from the Target: 200 /api/admins
+Received Response from the Target: 200 /api/usuarios
+Sending Request to the Target: GET /api/tarjetas
+Sending Request to the Target: GET /api/reportes/tarjetas_historial?_t=1782232192033
+Received Response from the Target: 200 /api/tarjetas
+Received Response from the Target: 200 /api/reportes/tarjetas_historial?_t=1782232192033
+Sending Request to the Target: GET /api/reportes/personas-registradas-sin-tarjeta
+Received Response from the Target: 200 /api/reportes/personas-registradas-sin-tarjeta
+Sending Request to the Target: GET /api/reportes/enrolamiento_historial?_t=1782232193885
+Sending Request to the Target: GET /api/reportes/enrolamiento_historial?_t=1782232193883
+Sending Request to the Target: GET /api/enrolar
+Received Response from the Target: 200 /api/reportes/enrolamiento_historial?_t=1782232193885
+Received Response from the Target: 200 /api/reportes/enrolamiento_historial?_t=1782232193883
+Received Response from the Target: 200 /api/enrolar
+Sending Request to the Target: GET /api/reportes/accesos_historial?_t=1782232197485
+Received Response from the Target: 200 /api/reportes/accesos_historial?_t=1782232197485
+Sending Request to the Target: GET /api/reportes/accesos_historial?_t=1782232197485
+Received Response from the Target: 200 /api/reportes/accesos_historial?_t=1782232197485
+13:13:42 [vite] hmr update /src/ui/TopNav.jsx
+13:13:51 [vite] hmr update /src/ui/TopNav.jsx
+Sending Request to the Target: GET /api/session
+Received Response from the Target: 200 /api/session
+Sending Request to the Target: GET /api/metrics
+Received Response from the Target: 200 /api/metrics
+Sending Request to the Target: GET /api/reportes/accesos_historial
+Sending Request to the Target: GET /api/tarjetas
+Received Response from the Target: 200 /api/tarjetas
+Received Response from the Target: 200 /api/reportes/accesos_historial
